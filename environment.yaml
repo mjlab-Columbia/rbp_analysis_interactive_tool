@@ -1,0 +1,17 @@
+name: rbp_analysis_interactive_tool
+channels:
+  - conda-forge
+  - bioconda
+  - anaconda
+dependencies:
+  - python
+  - pip
+  - bokeh==3.4.0
+  - markov-clustering==0.0.6.dev0
+  - networkx==3.2.1
+  - pandas==1.4.3
+  - mypy
+  - pip:
+      - mycolorpy==1.5.1
+      - unipressed==1.1.0
+      - markov_clustering
