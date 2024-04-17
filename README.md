@@ -7,7 +7,7 @@
 Clone the repository via the following command:
 
 ```bash
-git clone <url here>
+git clone https://github.com/mjlab-Columbia/rbp_analysis_interactive_tool.git
 ```
 
 Navigate to the `rbp_analysis_interactive_tool` directory. If you're on MacOS or Linux, enter the following into the terminal:
@@ -53,3 +53,7 @@ Run the application by executing the following command from within `rbp_analysis
 ```bash
 bokeh serve app.py
 ```
+
+## Citation
+
+Bibtex citation will be listed here once available.
