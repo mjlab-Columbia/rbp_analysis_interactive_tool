@@ -11,12 +11,18 @@ from bokeh.models import Legend, LegendItem, LabelSet
 from bokeh.models import CustomJS
 from bokeh.layouts import column, row
 from bokeh.plotting import figure
+from bokeh.core.properties import DashPattern
 
 import controls
 from buttons import create_interactome_button, download_button
-from colors import NodeColors, EdgeColors
+from colors import EdgeColors, GRAY, PPI_SUPPORT
 from data import subset_by_protein, subset_by_edge_type, subset_by_node_type
+from data import determine_node_coloring
 import markov_clustering as mc
+
+from statistics import get_graph_statistics
+
+from pdb import set_trace
 
 # GLOBAL
 graph_viewer = figure(
@@ -32,18 +38,18 @@ graph_viewer = figure(
 )
 
 # Create Column Data Source that will be used by the plot
-empty_edges_dict = dict(xs=[], ys=[], style=[], color=[],
-                        label=[])  # Dict[str, List]
+empty_edges_dict = dict(xs=[], ys=[], line_dash=[],
+                        line_color=[])  # Dict[str, List]
 source_edges = ColumnDataSource(empty_edges_dict)
-empty_nodes_dict = dict(xs=[], ys=[], color=[],
-                        name=[], node_size=[], label=[])  # Dict[str, List]
+empty_nodes_dict = dict(xs=[], ys=[], color=[], name=[],
+                        node_size=[], label=[])  # Dict[str, List]
 source_nodes = ColumnDataSource(empty_nodes_dict)
 
 graph_viewer.multi_line(
     'xs',
     'ys',
-    line_color='color',
-    line_dash='style',
+    line_color='line_color',
+    line_dash='line_dash',
     source=source_edges,
     alpha=0.5,
     width=1
@@ -62,7 +68,7 @@ graph_viewer.add_layout(
     LabelSet(
         x='xs',
         y='ys',
-        text='name',
+        text='label',
         source=source_nodes,
         background_fill_color='white',
         text_font_size='8px',
@@ -71,50 +77,49 @@ graph_viewer.add_layout(
 )
 
 # Create legend for edges
-edge_type_map = {
+edge_style_type_map = {
     "PPI Support": {
-        "line_color": EdgeColors.ppi_support.value,
+        "line_color": PPI_SUPPORT,
         "line_dash": 'solid'
     },
     "Direct": {
-        "line_color": EdgeColors.direct.value,
+        "line_color": GRAY,
         "line_dash": 'solid'
     },
     "RNA Shielded": {
-        "line_color": EdgeColors.rna_shielded.value,
+        "line_color": GRAY,
         "line_dash": 'dashed'
     },
     "RNA Mediated": {
-        "line_color": EdgeColors.rna_mediated.value,
+        "line_color": GRAY,
         "line_dash": 'dotted'
     }
 }
 
 # Define node type colormap
-node_type_colormap = {
-    "IP": NodeColors.IP.value,
-    "SEC": NodeColors.SEC.value,
-    "Both": NodeColors.Both.value,
+edge_color_map = {
+    "IP": EdgeColors.IP.value,
+    "SEC": EdgeColors.SEC.value,
+    "Both": EdgeColors.Both.value,
 }
 
-node_type_map = {
+edge_color_type_map = {
     "IP": {
-        "line_color": NodeColors.IP.value,
+        "line_color": EdgeColors.IP.value,
         "line_dash": "solid"
     },
     "SEC": {
-        "line_color": NodeColors.SEC.value,
+        "line_color": EdgeColors.SEC.value,
         "line_dash": "solid"
     },
     "Both": {
-        "line_color": NodeColors.Both.value,
+        "line_color": EdgeColors.Both.value,
         "line_dash": "solid"
     },
 }
 
-# TODO: Try to resolve (BAD_COLUMN_NAME) error without ruining functionality
 legend_items = []
-for label, attr in edge_type_map.items():
+for label, attr in edge_style_type_map.items():
     renderer = graph_viewer.line(
         [0],
         [0],
@@ -124,7 +129,7 @@ for label, attr in edge_type_map.items():
     legend_item = LegendItem(label=label, renderers=[renderer])
     legend_items.append(legend_item)
 
-for label, attr in node_type_map.items():
+for label, attr in edge_color_type_map.items():
     renderer = graph_viewer.line(
         [0],
         [0],
@@ -145,7 +150,7 @@ legend = Legend(
 graph_viewer.add_layout(legend, 'right')
 
 # Other
-statistics = PreText(text="Graph Statistics:", width=300)
+statistics_info = PreText(text="Graph Statistics:", width=300)
 global_df = read_csv("SupplementalTable_2.csv")
 subset_df = global_df.copy()
 
@@ -159,10 +164,6 @@ def subset_dataframe() -> DataFrame:
     edge_filtered_df = subset_by_edge_type(node_filtered_df)
     protein_filtered_df = subset_by_protein(edge_filtered_df)
 
-    print("Original", df.head())
-    print("Node filtered", node_filtered_df.head())
-    print("Edge filtered", edge_filtered_df.head())
-    print("Protein filtered", protein_filtered_df.head())
     return protein_filtered_df
 
 
@@ -194,57 +195,75 @@ def cluster_graph(graph: nx.Graph, method: str) -> nx.Graph:
 
 def update() -> None:
     df = subset_dataframe()  # DataFrame
-    subset_df = df.copy()  # DataFrame
+
     graph = nx.from_pandas_edgelist(df, source="Bait", target="Prey",
                                     edge_attr=["edge_color", "edge_style"])
     node_sizes = [8 for _ in range(len(graph.nodes()))]  # List[int]
     new_edges = list(graph.edges())  # List[Tuple[str, str]]
 
+    # Get new summary statistics based on new subsetting of the dataframe/graph
+    new_stats = get_graph_statistics(df,
+                                     graph,
+                                     num_proteins=5,
+                                     num_complexes=5)  # str
+    statistics_info.text = new_stats
+
     # Layout is a mapping of nodes --> coordinates
     # Dict[str, np.ndarray]
     layout = nx.spring_layout(graph)
 
-    new_names = list(layout.keys())  # List[str]
-    # List[np.ndarray]
-    coordinates = list(layout.values())
+    # Show protein names only if the LABELS checkbox is active
+    if controls.apply_labels_checkbox.active:
+        new_node_names = list(layout.keys())  # List[str]
+    else:
+        new_node_names = ["" for _ in layout.keys()]
 
-    # Tuple[Tuple[np.float64]]
-    node_x, node_y = zip(*coordinates)
+    coordinates = list(layout.values())  # List[ndarray]
+    node_x, node_y = zip(*coordinates)  # Tuple[Tuple[float64]]
 
-    # For each new edge, get the respective x coordinates for source -> target
+    # For each edge, get respective x and y coordinates for source -> target
     edge_x = [
         [layout[edge[0]][0], layout[edge[1]][0]]
         for edge in new_edges
     ]  # List[List[float, float]]
 
-    # For each new edge, get the respective x coordinates for source -> target
     edge_y = [
         [layout[edge[0]][1], layout[edge[1]][1]]
         for edge in new_edges
     ]  # List[List[float, float]]
 
-    # TODO: Implement color by logic here
-    new_node_colors = ["black" for _ in range(len(graph.nodes()))]
+    # Account for the "color by" selection menu
+    node_color_dict = determine_node_coloring(df)
+    new_node_colors = []  # List[str]
+    for node in layout.keys():
+        if node in node_color_dict:
+            color = node_color_dict[node]["node_color"]
+            new_node_colors.append(color)
+        else:
+            new_node_colors.append(GRAY)
 
-    # TODO: Implement interaction type coloring/styling
-    new_edge_colors = ["black" for _ in range(len(graph.nodes()))]
-    new_edge_styles = ["solid" for _ in range(len(graph.nodes()))]
+    # Edge data is tuple of (source, target, attributes)
+    new_edge_colors = [attr["edge_color"]
+                       for _, _, attr in graph.edges(data=True)
+                       if "edge_color" in attr]  # List[str]
+    new_edge_styles = [attr["edge_style"]
+                       for _, _, attr in graph.edges(data=True)
+                       if "edge_style" in attr]  # List[List[int]]
 
     source_nodes.data = dict(
         xs=node_x,
         ys=node_y,
-        names=new_names,
+        names=new_node_names,
         color=new_node_colors,
         node_size=node_sizes,
-        label=new_names
+        label=new_node_names,
     )
 
     source_edges.data = dict(
         xs=edge_x,
         ys=edge_y,
-        style=new_edge_styles,
-        color=new_edge_colors,
-        label=new_names
+        line_dash=new_edge_styles,
+        line_color=new_edge_colors,
     )
 
 
@@ -273,7 +292,7 @@ download_button.js_on_click(
 control_inputs = column(*controls.all_controls, width=300)
 
 # Displaying graph statistics
-statistics_output = column(*[statistics], width=300)
+statistics_output = column(*[statistics_info], width=300)
 
 # Parent column where everything is laid out
 root_column = column(

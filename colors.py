@@ -1,18 +1,20 @@
 from enum import Enum
 
+GRAY = "#808080"
+PPI_SUPPORT = "#39B54A"
 
-class NodeColors(Enum):
+
+class EdgeColors(Enum):
     IP: str = "#2B3990"
     SEC: str = "#BCBEC0"
     Both: str = "#F26B21"
 
 
-class EdgeColors(Enum):
-    direct: str = "#808080"
-    rna_mediated: str = "#808080"
-    rna_shielded: str = "#808080"
-    undetermined: str = "#808080"
-    ppi_support: str = "#39B54A"
+# class EdgeStyles(Enum):
+#     direct: DashPattern = DashPattern([])
+#     rna_mediated: DashPattern = DashPattern([8, 4])
+#     rna_shielded: DashPattern = DashPattern([5, 20])
+#     undetermined: DashPattern = DashPattern([1, 1])
 
 
 class LifecycleColors(Enum):
@@ -26,17 +28,19 @@ class LifecycleColors(Enum):
     negative_control: str = "#FF0000"
     modification: str = "#69477F"
     new: str = "#939598"
+    undetermined: str = GRAY
 
 
 LifecycleColorsDict = {
-    "decay": LifecycleColors.decay,
-    "export": LifecycleColors.export,
-    "splicing": LifecycleColors.splicing,
-    "localization": LifecycleColors.localization,
-    "3' end processing": LifecycleColors.three_prime_end_processing,
-    "translation": LifecycleColors.translation,
-    "new": LifecycleColors.new,
-    "transcription": LifecycleColors.transcription,
-    "negative control": LifecycleColors.negative_control,
-    "modification": LifecycleColors.modification
-}  # Dict[str, LifecycleColors]
+    "decay": LifecycleColors.decay.value,
+    "export": LifecycleColors.export.value,
+    "splicing": LifecycleColors.splicing.value,
+    "localization": LifecycleColors.localization.value,
+    "3' end processing": LifecycleColors.three_prime_end_processing.value,
+    "translation": LifecycleColors.translation.value,
+    "new": LifecycleColors.new.value,
+    "transcription": LifecycleColors.transcription.value,
+    "negative control": LifecycleColors.negative_control.value,
+    "modification": LifecycleColors.modification.value,
+    "undetermined": LifecycleColors.undetermined.value
+}  # Dict[str, str]

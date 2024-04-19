@@ -1,21 +1,16 @@
-from bokeh.core.properties import DashPattern
+# from bokeh.core.properties import DashPattern
+from enum import Enum
+from pandas import DataFrame
+from matplotlib.pyplot import cm
+
+from typing import Dict, Tuple, Hashable
+from pdb import set_trace
 
 from buttons import dataset_combined_checkbox_button, dataset_checkbox_button
 from buttons import interaction_type_checkbox_button
-from enum import Enum
-
-from pandas import DataFrame, Series
-
-from matplotlib.pyplot import cm
-
-from colors import NodeColors, LifecycleColors
-from colors import LifecycleColorsDict
-
+from colors import EdgeColors, LifecycleColorsDict, GRAY
 import controls
 
-from typing import Dict, Tuple, Any
-
-from pdb import set_trace as st
 
 all_global_data_columns = [
     'Bait',
@@ -108,6 +103,15 @@ class InteractionTypeValue(Enum):
     undetermined: str = "undetermined"
 
 
+def rgba_to_hex(r, g, b, a) -> str:
+    r_int = int(r * 255)
+    g_int = int(g * 255)
+    b_int = int(b * 255)
+    a_int = int(a * 255)
+    hex_color = "#{:02x}{:02x}{:02x}{:02x}".format(r_int, g_int, b_int, a_int)
+    return hex_color
+
+
 def subset_by_node_type(df: DataFrame) -> DataFrame:
     """
     Return the baits corresponding to the dataset the user selected via
@@ -116,9 +120,9 @@ def subset_by_node_type(df: DataFrame) -> DataFrame:
 
     # Each type of interaction has a color
     df["edge_color"] = df["IP_interaction_type"].map({
-        "IP": NodeColors.IP.value,
-        "SEC": NodeColors.SEC.value,
-        "both": NodeColors.Both.value
+        "IP": EdgeColors.IP.value,
+        "SEC": EdgeColors.SEC.value,
+        "both": EdgeColors.Both.value
     })
     datasets = dataset_checkbox_button.active  # List[int]
     # List[int]
@@ -155,14 +159,22 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
     """
     Subset df to bait-prey pairs based on protein interaction type
     """
+    df_copy = df.copy()
 
     # Note: DashPatterns take iterable as [dash, gap] ([] is a solid line)
-    df["edge_style"] = df["IP_interaction_type"].map({
-        InteractionTypeValue.direct.value: DashPattern([]),
-        InteractionTypeValue.mediated.value: DashPattern([8, 4]),
-        InteractionTypeValue.shielded.value: DashPattern([5, 20]),
-        InteractionTypeValue.undetermined.value: DashPattern([1, 1])
+    df_copy["edge_style"] = df_copy["IP_interaction_type"].map({
+        InteractionTypeValue.direct.value: [],
+        InteractionTypeValue.mediated.value: [8, 4],
+        InteractionTypeValue.shielded.value: [5, 20],
+        InteractionTypeValue.undetermined.value: [1, 1]
     })
+
+    df_copy["edge_color"] = df_copy["Interaction_support"].map({
+        "IP": EdgeColors.IP.value,
+        "SEC": EdgeColors.SEC.value,
+        "both": EdgeColors.Both.value
+    })
+
     interaction_type = interaction_type_checkbox_button.active  # List[int]
     types_to_include = []
 
@@ -180,9 +192,8 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
     if InteractionTypeCheckbox.shielded.value in interaction_type:
         types_to_include.append(InteractionTypeValue.shielded.value)
 
-    st()
-    mask = df["IP_interaction_type"].isin(types_to_include)
-    filtered_df = df[mask].copy()
+    mask = df_copy["IP_interaction_type"].isin(types_to_include)
+    filtered_df = df_copy[mask].copy()
     return filtered_df
 
 
@@ -192,13 +203,13 @@ def subset_by_protein(df: DataFrame) -> DataFrame:
     """
     protein_str = str(controls.protein_text_input.value).strip()  # str
     protein_list = [p.strip() for p in protein_str.split(",")]  # List[str]
-    if (len(protein_list) == 0) and (protein_list[0] == ""):
+    if (len(protein_list) == 1) and (protein_list[0] == ""):
         return df
     else:
         return df[df["Bait"].isin(protein_list)]
 
 
-def lifecycle_node_attributes(df: DataFrame) -> Dict[str, Dict[str, str]]:
+def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     bait_col = "Bait_lifecycle_step"  # str
     prey_col = "prey_lifecycle_stage_main_by_most_common_bait_stage"  # str
 
@@ -213,11 +224,13 @@ def lifecycle_node_attributes(df: DataFrame) -> Dict[str, Dict[str, str]]:
     bait_lifecycle_dict = bait_lifecycle_df.to_dict()
     bait_lifecycle_dict = bait_lifecycle_dict[bait_col]  # Dict[str, str]
 
-    # Map each bait node to its lifecycle color
-    bait_colors = {
-        key: str(LifecycleColorsDict[value])
-        for key, value in bait_lifecycle_dict.items()
-    }  # Dict[str, str]
+    # # Map each bait node to its lifecycle color
+    # bait_colors = {}  # Dict[str, str]
+    # for key, value in bait_lifecycle_dict.items():
+    #     if value in LifecycleColorsDict:
+    #         bait_colors[key] = LifecycleColorsDict[value]
+    #     else:
+    #         bait_colors[key] = GRAY
 
     # Colors for prey proteins
     prey_lifecycle_df = df[["Prey", prey_col]].copy()
@@ -229,24 +242,34 @@ def lifecycle_node_attributes(df: DataFrame) -> Dict[str, Dict[str, str]]:
     prey_lifecycle_dict = prey_lifecycle_df.to_dict()
     prey_lifecycle_dict = prey_lifecycle_dict[prey_col]  # Dict[str, str]
 
-    # Map each prey node to its lifecycle color
-    prey_colors = {
-        key: str(LifecycleColorsDict[value])
-        for key, value in prey_lifecycle_dict.items()
-    }  # Dict[str, str]
+    # # Map each prey node to its lifecycle color
+    # prey_colors = {}  # Dict[str, str]
+    # for key, value in prey_lifecycle_dict.items():
+    #     if key in LifecycleColorsDict:
+    #         prey_colors[key] = LifecycleColorsDict[value]
+    #     else:
+    #         prey_colors[key] = GRAY
 
     # The | operation merges two dictionaries by keys
-    protein_colors = bait_colors | prey_colors
+    protein_dict = bait_lifecycle_dict | prey_lifecycle_dict  # Dict[str, str]
 
-    node_attributes = {
-        key: {"node_color": value}
-        for key, value in protein_colors
-    }  # Dict[str, Dict[str, LifecycleColors]]
+    node_attributes = {}  # Dict[Hashable, Dict[str, str]]
+    for protein, lifecycle_step in protein_dict.items():
+        if lifecycle_step in LifecycleColorsDict:
+            node_color = LifecycleColorsDict[lifecycle_step]
+        else:
+            node_color = GRAY
+
+        attributes = {
+            "legend_label": lifecycle_step,
+            "node_color": node_color
+        }  # Dict[str, str]
+        node_attributes[protein] = attributes
 
     return node_attributes
 
 
-def location_node_attributes(df: DataFrame) -> Dict[str, Dict[str, Tuple[float, float, float, float]]]:
+def location_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     bait_col = "Bait_main_location_HPA"
     prey_col = "Prey_main_location_HPA"
 
@@ -278,8 +301,8 @@ def location_node_attributes(df: DataFrame) -> Dict[str, Dict[str, Tuple[float, 
     unique_locations = list(unique_bait_locations |
                             unique_prey_locations)  # List[str]
 
-    # integer --> color
-    color_map = cm.get_cmap("tab10", len(unique_locations))
+    # integer --> color in RGBA
+    color_map = cm.get_cmap("tab10", len(unique_locations))  # Colormap
 
     # location --> color
     color_dict = {location: color_map(i)
@@ -287,14 +310,14 @@ def location_node_attributes(df: DataFrame) -> Dict[str, Dict[str, Tuple[float, 
 
     # node --> {"node_attribute": color}
     node_attributes = {
-        key: {"node_attribute": color_dict[value]}
+        key: {"node_color": rgba_to_hex(*color_dict[value])}
         for key, value in combined_location_dict.items()
-    }  # Dict[str, Dict[str, Tuple[float, float, float, float]]]
+    }  # Dict[Hashable, Dict[str, str]]
 
     return node_attributes
 
 
-def disease_node_attribute(df: DataFrame) -> Dict[str, Dict[str, Tuple[float, float, float, float]]]:
+def disease_node_attribute(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     bait_col = "Bait_Disgenet_disease_.1"
     prey_col = "Prey_Disgenet_disease_.1"
 
@@ -325,45 +348,46 @@ def disease_node_attribute(df: DataFrame) -> Dict[str, Dict[str, Tuple[float, fl
     # Dict[str, str]
     combined_disease_dict = bait_disease_dict | prey_disease_dict
 
-    # integer --> color
-    color_map = cm.get_cmap("tab10", len(unique_diseases))
+    # integer --> color in RGBA
+    color_map = cm.get_cmap("tab10", len(unique_diseases))  # Colormap
 
     # disease --> color
     color_dict = {disease: color_map(i)
                   for i, disease in enumerate(unique_diseases)}
 
-    # node --> {"node_attribute": disease color}
+    # node --> {"node_color": disease color}
+    # Note: RGBA tuple -> rgba_to_hex(*RGBA) -> rgba_to_hex(R, G, B, A) -> hex
     node_attributes = {
-        key: {"node_attributes": color_dict[value]}
+        key: {"node_color": rgba_to_hex(*color_dict[value])}
         for key, value in combined_disease_dict.items()
-    }  # Dict[str, Dict[str, Tuple[float, float, float, float]]]
+    }  # Dict[Hashable, Dict[str, str]]
 
     return node_attributes
 
 
 # TODO: Create type aliases to replace `Any` type annotation
-def determine_node_coloring(df: DataFrame) -> Tuple[DataFrame, Any]:
-    coloring_selection = controls.node_coloring_selection
+def determine_node_coloring(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
+    coloring_selection = controls.node_coloring_selection.value  # str
 
-    if coloring_selection.value == "none":
-        baits = set(df["Baits"].unique())
-        preys = set(df["Preys"].unique())
+    if coloring_selection == "none":
+        baits = set(df["Bait"].unique())
+        preys = set(df["Prey"].unique())
         proteins = baits | preys
 
         no_attributes = {
-            protein: {"node_color": ""}
+            protein: {"node_color": GRAY, "legend_label": "Other"}
             for protein in proteins
         }  # Dict[str, Dict[str, str]]
-        return df, no_attributes
-    elif coloring_selection.value == "lifecycle stage":
+        return no_attributes
+    elif coloring_selection == "lifecycle stage":
         lifecycle_attributes = lifecycle_node_attributes(df)
-        return df, lifecycle_attributes
-    elif coloring_selection.value == "location":
+        return lifecycle_attributes
+    elif coloring_selection == "location":
         location_attributes = location_node_attributes(df)
-        return df, location_attributes
-    elif coloring_selection.value == "disease":
+        return location_attributes
+    elif coloring_selection == "disease":
         disease_attributes = disease_node_attribute(df)
-        return df, disease_attributes
+        return disease_attributes
     else:
         message = "supported values: lifecycle stage, location, disease, none"
         raise Exception(message)
