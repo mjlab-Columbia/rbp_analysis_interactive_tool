@@ -1,82 +1,15 @@
 # from bokeh.core.properties import DashPattern
 from enum import Enum
-from pandas import DataFrame
+from pandas import DataFrame, concat
 from matplotlib.pyplot import cm
+from numpy import nan
 
-from typing import Dict, Tuple, Hashable
-from pdb import set_trace
+from typing import Dict, Hashable, List
 
 from buttons import dataset_combined_checkbox_button, dataset_checkbox_button
 from buttons import interaction_type_checkbox_button
-from colors import EdgeColors, LifecycleColorsDict, GRAY
+from colors import EdgeColors, LifecycleColorsDict, LifecycleColors
 import controls
-
-
-all_global_data_columns = [
-    'Bait',
-    'Prey',
-    'IP',
-    'Bait_lifecycle_step',
-    'IP_experiment',
-    'IP_reps',
-    'IP_bait_gene',
-    'IP_prey_gene',
-    'IP_volc_pval_cutoff',
-    'IP_volc_log2FC',
-    'IP_volc_pvalue',
-    'IP_bait_gene_uniprotID',
-    'IP_prey_gene_uniprotID',
-    'SEC_gene_A',
-    'SEC_gene_B',
-    'SEC_gene_A_uniprotID',
-    'SEC_gene_B_uniprotID',
-    'IP_interaction_type',
-    'Interaction_support',
-    'IP_prey_over_bait_intensity_stoichimoetry',
-    'stoich_bait_uniprotID',
-    'stoich_prey_uniprotID',
-    'totalProteome_prey_over_bait_intensity_stoichimoetry',
-    'in_CORUM_2020',
-    'CORUM_complex_2020',
-    'in_CORUM_2022',
-    'CORUM_complex_2022',
-    'in_Mentha',
-    'Mentha_score',
-    'in_HI',
-    'in_HIPPIE',
-    'HIPPIE_score',
-    'in_recY2H',
-    'recY2H_score',
-    'in_BioID',
-    'in_OpenCell',
-    'OpenCell_enrichment',
-    'in_BioPlex3',
-    'BioPlex3_score',
-    'PPI_support',
-    'bait_eclipped',
-    'prey_eclipped',
-    'Bait_targets_cnt',
-    'Prey_targets_cnt',
-    'shared_targets',
-    'Bait_main_location_HPA',
-    'Prey_main_location_HPA',
-    'Bait_main_location.nucl.cyto.',
-    'Prey_main_location.nucl.cyto.',
-    'Prey_is_RBP_HydRa',
-    'Prey_HydRa_score',
-    'Prey_PSP_PScore',
-    'Bait_Disgenet_disease_.1',
-    'Bait_Disgenet_disease_.2',
-    'Prey_Disgenet_disease_.1',
-    'Prey_Disgenet_disease_.2',
-    'Prey_SAFE_localization_BioID',
-    'Prey_NMF_localization_BioID',
-    'Bait_SAFE_localization_BioID',
-    'Bait_NMF_localization_BioID',
-    'Prey_NMF_localization_2018_BioID',
-    'prey_lifecycle_stage_main_by_most_common_bait_stage',
-    'bait_prey_pctLocalizationOverlap_HPA'
-]
 
 
 class Dataset(Enum):
@@ -101,6 +34,42 @@ class InteractionTypeValue(Enum):
     mediated: str = "mediated"
     shielded: str = "shielded"
     undetermined: str = "undetermined"
+
+
+def remap_df(df: DataFrame) -> DataFrame:
+    new_bait_lifecycle_dict = {
+        nan: nan,
+        "decay": "decay",
+        "export": "export",
+        "splicing": "splicing",
+        "new": "undetermined",
+        "localization": "localization",
+        "3' end processing": "3' end processing",
+        "translation": "translation",
+        "new": "undetermined",
+        "transcription": "transcription",
+        "negative control": "negative control",
+        "modification": "modification"
+    }
+
+    new_prey_lifecycle_dict = {
+        "undetermined": "undetermined",
+        "splicing": "splicing",
+        "degradation": "decay",
+        "translation": "translation",
+        "transcription": "transcription",
+        "export": "export",
+        "3' end processing": "3' end processing",
+        "localization": "localization",
+        "modification": "modification"
+    }
+
+    bait_col = "Bait_lifecycle_step"
+    prey_col = "prey_lifecycle_stage_main_by_most_common_bait_stage"
+    df_copy = df.copy()
+    df_copy[bait_col] = df_copy[bait_col].map(new_bait_lifecycle_dict)
+    df_copy[prey_col] = df_copy[prey_col].map(new_prey_lifecycle_dict)
+    return df_copy
 
 
 def rgba_to_hex(r, g, b, a) -> str:
@@ -152,7 +121,7 @@ def subset_by_node_type(df: DataFrame) -> DataFrame:
     elif ip_and_sec:
         return df[both_mask]
     else:
-        raise Exception("Improper combination of dataset checkboxes")
+        return df
 
 
 def subset_by_edge_type(df: DataFrame) -> DataFrame:
@@ -166,7 +135,8 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
         InteractionTypeValue.direct.value: [],
         InteractionTypeValue.mediated.value: [8, 4],
         InteractionTypeValue.shielded.value: [5, 20],
-        InteractionTypeValue.undetermined.value: [1, 1]
+        InteractionTypeValue.undetermined.value: [1, 1],
+        nan: []
     })
 
     df_copy["edge_color"] = df_copy["Interaction_support"].map({
@@ -179,8 +149,7 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
     types_to_include = []
 
     if len(interaction_type) == 0:
-        message = "Supported values: Direct, RNA mediated, or RNA shielded"
-        raise Exception(message)
+        return df
 
     # TODO: This logic can be simpler, so figure out a simplification
     if InteractionTypeCheckbox.direct.value in interaction_type:
@@ -192,8 +161,43 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
     if InteractionTypeCheckbox.shielded.value in interaction_type:
         types_to_include.append(InteractionTypeValue.shielded.value)
 
-    mask = df_copy["IP_interaction_type"].isin(types_to_include)
-    filtered_df = df_copy[mask].copy()
+    # Only consider edges with IP or IP & SEC for IP interaction type filtering
+    ip_mask = df_copy["Interaction_support"].isin(["IP", "both"])  # Series
+    ip_type_mask = df_copy[ip_mask]["IP_interaction_type"].isin(
+        types_to_include)
+    ip_rows = df_copy[ip_mask][ip_type_mask].copy()  # DataFrame
+
+    # Get SEC rows separately
+    sec_mask = df_copy["Interaction_support"] == "SEC"  # Series
+    sec_rows = df_copy[sec_mask].copy()  # DataFrame
+
+    filtered_df = concat([ip_rows, sec_rows], axis=0)  # DataFrame
+    return filtered_df
+
+
+def filter_by_dfs(df: DataFrame,
+                  nodes: List[str],
+                  n: int) -> DataFrame:
+    """
+    Performs depth first search on bait-prey dataframe
+    """
+    indices = []
+    visited = set()
+
+    def dfs(node, depth):
+        visited.add(node)
+        if depth <= n:
+            neighbors = df[df['Bait'] == node].index
+            for neighbor_idx in neighbors:
+                indices.append(neighbor_idx)
+                neighbor = df.loc[neighbor_idx, 'Prey']
+                if neighbor not in visited:
+                    dfs(neighbor, depth + 1)
+
+    for node in nodes:
+        dfs(node, 0)
+
+    filtered_df = df.loc[indices]
     return filtered_df
 
 
@@ -203,10 +207,15 @@ def subset_by_protein(df: DataFrame) -> DataFrame:
     """
     protein_str = str(controls.protein_text_input.value).strip()  # str
     protein_list = [p.strip() for p in protein_str.split(",")]  # List[str]
+
+    # If there's no proteins entered, we return all edges
     if (len(protein_list) == 1) and (protein_list[0] == ""):
         return df
     else:
-        return df[df["Bait"].isin(protein_list)]
+        num_neighbors_value = controls.num_neighbors_selection.value  # str
+        num_neighbors = int(num_neighbors_value) - 1
+        filtered_df = filter_by_dfs(df, protein_list, num_neighbors)
+        return filtered_df
 
 
 def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
@@ -224,14 +233,6 @@ def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     bait_lifecycle_dict = bait_lifecycle_df.to_dict()
     bait_lifecycle_dict = bait_lifecycle_dict[bait_col]  # Dict[str, str]
 
-    # # Map each bait node to its lifecycle color
-    # bait_colors = {}  # Dict[str, str]
-    # for key, value in bait_lifecycle_dict.items():
-    #     if value in LifecycleColorsDict:
-    #         bait_colors[key] = LifecycleColorsDict[value]
-    #     else:
-    #         bait_colors[key] = GRAY
-
     # Colors for prey proteins
     prey_lifecycle_df = df[["Prey", prey_col]].copy()
     prey_lifecycle_df.dropna(inplace=True)
@@ -242,14 +243,6 @@ def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     prey_lifecycle_dict = prey_lifecycle_df.to_dict()
     prey_lifecycle_dict = prey_lifecycle_dict[prey_col]  # Dict[str, str]
 
-    # # Map each prey node to its lifecycle color
-    # prey_colors = {}  # Dict[str, str]
-    # for key, value in prey_lifecycle_dict.items():
-    #     if key in LifecycleColorsDict:
-    #         prey_colors[key] = LifecycleColorsDict[value]
-    #     else:
-    #         prey_colors[key] = GRAY
-
     # The | operation merges two dictionaries by keys
     protein_dict = bait_lifecycle_dict | prey_lifecycle_dict  # Dict[str, str]
 
@@ -258,7 +251,7 @@ def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
         if lifecycle_step in LifecycleColorsDict:
             node_color = LifecycleColorsDict[lifecycle_step]
         else:
-            node_color = GRAY
+            node_color = LifecycleColors.undetermined.value
 
         attributes = {
             "legend_label": lifecycle_step,
@@ -308,6 +301,8 @@ def location_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     color_dict = {location: color_map(i)
                   for i, location in enumerate(unique_locations)}
 
+    # TODO: Make a legend for the disease coloring
+
     # node --> {"node_attribute": color}
     node_attributes = {
         key: {"node_color": rgba_to_hex(*color_dict[value])}
@@ -355,6 +350,8 @@ def disease_node_attribute(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     color_dict = {disease: color_map(i)
                   for i, disease in enumerate(unique_diseases)}
 
+    # TODO: Make a legend for the disease coloring
+
     # node --> {"node_color": disease color}
     # Note: RGBA tuple -> rgba_to_hex(*RGBA) -> rgba_to_hex(R, G, B, A) -> hex
     node_attributes = {
@@ -365,7 +362,6 @@ def disease_node_attribute(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     return node_attributes
 
 
-# TODO: Create type aliases to replace `Any` type annotation
 def determine_node_coloring(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     coloring_selection = controls.node_coloring_selection.value  # str
 
@@ -375,7 +371,8 @@ def determine_node_coloring(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
         proteins = baits | preys
 
         no_attributes = {
-            protein: {"node_color": GRAY, "legend_label": "Other"}
+            protein: {"node_color": LifecycleColors.undetermined.value,
+                      "legend_label": "Other"}
             for protein in proteins
         }  # Dict[str, Dict[str, str]]
         return no_attributes

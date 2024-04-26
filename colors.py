@@ -25,10 +25,10 @@ class LifecycleColors(Enum):
     three_prime_end_processing: str = "#00AEEF"
     translation: str = "#354089"
     transcription: str = "#D43C96"
-    negative_control: str = "#FF0000"
+    negative_control: str = "#939598"
     modification: str = "#69477F"
     new: str = "#939598"
-    undetermined: str = GRAY
+    undetermined: str = "#939598"
 
 
 LifecycleColorsDict = {

@@ -1,8 +1,12 @@
-from pandas import DataFrame
-from data import InteractionTypeValue
+from pandas import DataFrame, read_excel
+from data import InteractionTypeValue, Dataset
 from networkx import betweenness_centrality, Graph
 
-from typing import List, Tuple
+from typing import List, Tuple, Union
+
+from buttons import dataset_checkbox_button
+
+Clusters = List[Tuple[str]]
 
 
 def get_number_of_nodes(df: DataFrame) -> int:
@@ -43,13 +47,19 @@ def get_number_of_shielded_interactions(df: DataFrame) -> int:
 
 def get_number_of_shared_interactions(df: DataFrame) -> int:
     col = "Interaction_support"  # str
-    subset_df = df[df[col] == "both"]  # DataFrame
+    subset_df = df[df[col] == "both"].copy()  # DataFrame
+    return subset_df.shape[0]
+
+
+def get_number_of_sec_interactions(df: DataFrame) -> int:
+    col = "Interaction_support"  # str
+    subset_df = df[df[col] == "SEC"].copy()  # DataFrame
     return subset_df.shape[0]
 
 
 def get_number_of_ip_interactions(df: DataFrame) -> int:
     col = "Interaction_support"  # str
-    subset_df = df[df[col] == "IP"]  # DataFrame
+    subset_df = df[df[col] == "IP"].copy()  # DataFrame
     return subset_df.shape[0]
 
 
@@ -63,19 +73,26 @@ def get_top_betweenness_proteins(df: DataFrame,
     return sorted_bw_subset
 
 
-# TODO: Implement if needed (ask Lena)
+def get_num_corum_complexes(df: DataFrame) -> int:
+    return 0
+
+
 def get_top_betweenness_complexes(df: DataFrame,
                                   num_complexes: int = 5) -> int:
+
     return 0
 
 
 def get_graph_statistics(df: DataFrame,
                          graph: Graph,
-                         num_proteins: int = 5,
-                         num_complexes: int = 5) -> str:
+                         num_proteins: int,
+                         num_complexes: int,
+                         clusters: Union[Clusters, None]) -> str:
     """
     Calculates and formats summary statistics for the interactome graph
     """
+    active_datasets = dataset_checkbox_button.active
+
     # Get all of the statistics we care about
     num_nodes = get_number_of_nodes(df)  # int
     num_interactions = get_number_of_interactions(df)  # int
@@ -85,32 +102,94 @@ def get_graph_statistics(df: DataFrame,
     rna_shielded = get_number_of_shielded_interactions(df)  # int
 
     shared_interactions = get_number_of_shared_interactions(df)  # int
+    sec_interactions = get_number_of_sec_interactions(df)  # int
     ip_interactions = get_number_of_ip_interactions(df)  # int
 
-    bw_proteins = get_top_betweenness_proteins(df,
-                                               graph,
+    bw_proteins = get_top_betweenness_proteins(df=df,
+                                               graph=graph,
                                                num_proteins=5)
 
     top_proteins = [protein for protein, _ in bw_proteins]  # List[str]
 
     # Format all the statistics into single string to print
-    stats_string = f"""
-    Number of Nodes: {num_nodes}
-    Number of Interactions: {num_interactions}
+    num_nodes_stats = f"Number of Nodes: {num_nodes}"
+    num_interactions_stats = f"Number of Interactions: {num_interactions}"
+    node_stats = "\n".join([num_nodes_stats, num_interactions_stats])
 
-    Direct: {direct}
-    RNA Mediated: {rna_mediated}
-    RNA Shielded: {rna_shielded}
+    direct_stats = f"Direct: {direct}"  # str
+    mediated_stats = f"RNA Mediated: {rna_mediated}"  # str
+    shielded_stats = f"RNA Shieleded: {rna_shielded}"  # str
+    interaction_type_stats = "\n".join([direct_stats,
+                                        mediated_stats,
+                                        shielded_stats])  # str
 
-    Shared Interactions: {shared_interactions}
-    IP Interactions: {ip_interactions}
+    # TODO: Ask Lena about shortening this by doing SEC Interactions: N/A
+    # Create each string separately to avoid extra indentations
+    if Dataset.SEC.value in active_datasets:
+        shared = f"Shared Interactions: {shared_interactions}"
+        ip = f"IP Interactions: {ip_interactions}"
+        sec = f"SEC Interactions: {sec_interactions}"
+        interaction_origin_stats = "\n".join([shared, ip, sec])
+    else:
+        shared = f"Shared Interactions: {shared_interactions}"
+        ip = f"IP Interactions: {ip_interactions}"
+        interaction_origin_stats = "\n".join([shared, ip])
 
-    Top Five Betweeness Proteins:
-    {top_proteins[0]}
-    {top_proteins[1]}
-    {top_proteins[2]}
-    {top_proteins[3]}
-    {top_proteins[4]}
-    """
+    preamble = "Top Five Betweeness Proteins:"
+    protein_list = "\n".join(top_proteins[:5])
+    top_five_proteins = f"{preamble}\n{protein_list}"
+
+    if clusters is None:
+        stats_list = [node_stats, interaction_type_stats,
+                      interaction_origin_stats, top_five_proteins]  # List[str]
+        stats_string = "\n\n".join(stats_list)  # str
+    else:
+        num_complexes = get_num_corum_complexes(df)  # int
+
+        norm_bw_filepath = "SupplementalTable_8.xlsx"  # str
+        norm_bw_df = read_excel(norm_bw_filepath,
+                                sheet_name=1,
+                                index_col=0)  # DataFrame
+        norm_bw_df.reset_index(inplace=True)  # None
+        norm_bw_df.columns = ["protein",
+                              "bw_centrality", "is_bait"]  # List[str]
+
+        # Populate dict with most common CORUM complex per cluster and median
+        # betweenness centrality of proteins in cluster
+        complex_bw = {}  # Dict[str, float]
+        for cluster in clusters:
+            bait_mask = df["Bait"].isin(cluster)  # Series
+            prey_mask = df["Prey"].isin(cluster)  # Series
+            df_subset = df[bait_mask | prey_mask].copy()  # DataFrame
+
+            # Find the most common CORUM complex in the cluster
+            corum_complexes = df_subset["CORUM_complex_2022"]  # Series
+            corum_complexes_no_nan = corum_complexes.dropna()
+            complex_counts = corum_complexes_no_nan.value_counts()  # Series
+
+            # Only add items to complex_bw if there's >= 1 complex
+            if complex_counts.shape[0] != 0:
+                most_common_complex = complex_counts.idxmax()  # str
+
+                # Find the median betweenness centrality of proteins in cluster
+                proteins = df_subset[["Bait", "Prey"]].values.ravel()
+                protein_mask = norm_bw_df["protein"].isin(proteins)  # Series
+                median_bw = norm_bw_df[protein_mask]["bw_centrality"].median()
+                complex_bw[most_common_complex] = median_bw
+
+        # Sort complexes by betweenness centrality
+        sorted_complex_bw = sorted(complex_bw.items(),
+                                   key=lambda x: x[1],
+                                   reverse=True)  # List[Tuple[str, str]]
+        top_complexes = [name for name, _ in sorted_complex_bw]  # List[str]
+        num_complexes_stats = f"Number of Complexes: {num_complexes}"
+        preamble = "Top Five Betweenness Complexes:"
+        complex_list = "\n".join(top_complexes[:5])
+        top_five_complexes = "\n".join([preamble, complex_list])
+
+        stats_list = [node_stats, interaction_type_stats,
+                      interaction_origin_stats, top_five_proteins,
+                      num_complexes_stats, top_five_complexes]
+        stats_string = "\n\n".join(stats_list)
 
     return stats_string

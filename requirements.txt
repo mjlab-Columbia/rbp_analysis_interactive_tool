@@ -3,3 +3,6 @@ networkx
 pandas
 mypy
 markov_clustering
+scipy
+openpyxl
+matplotlib

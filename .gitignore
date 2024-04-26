@@ -1,12 +1,17 @@
 # Extra things to ignore
 
-Interactome.html
+data.txt
+clusters.txt
 
 # Local cachine for mypy type checking
 .mypy_cache/*
 
 # Ignore the color scheme since it's available in the manuscript
 ColorScheme_011623_updated.pdf
+OLD_SupplementalTable_2.csv
+
+# Ignore python notebooks
+*.ipynb
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
