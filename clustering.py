@@ -4,6 +4,7 @@ from scipy.sparse import csr_matrix
 import markov_clustering as mc
 from os import system
 from typing import List, Tuple, Dict, Union, Hashable
+from pdb import set_trace
 
 # Mypy type aliases for brevity
 NodeColoring = Dict[Hashable, Dict[str, str]]
@@ -97,6 +98,6 @@ def get_clustered_coloring(graph: nx.Graph,
     else:
         # TODO: Visualize the clusters even if "Color nodes by" is none
         # New node colors = old node colors if we're not clustering
-        new_node_colors = {k: v["node_color"]
+        new_node_colors = {k: {"node_color": v["node_color"]}
                            for k, v in node_coloring.items()}
         return new_node_colors, None
