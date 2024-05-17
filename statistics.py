@@ -1,6 +1,7 @@
 from pandas import DataFrame, read_excel
 from data import InteractionTypeValue, Dataset
 from networkx import betweenness_centrality, Graph
+from pdb import set_trace
 
 from typing import List, Tuple, Union
 
@@ -67,14 +68,16 @@ def get_top_betweenness_proteins(df: DataFrame,
                                  graph: Graph,
                                  num_proteins: int) -> List[Tuple[str, float]]:
     bw_dict = betweenness_centrality(graph)  # Dict[str, float]
-    sorted_bw = sorted(bw_dict.items(),
-                       key=lambda x: x[1])  # List[Tuple[str, float]]
-    sorted_bw_subset = sorted_bw[:num_proteins]  # List[Tuple[str, float]]
+    sorted_bw_asc = sorted(bw_dict.items(),
+                           key=lambda x: x[1])  # List[Tuple[str, float]]
+    sorted_bw_desc = list(reversed(sorted_bw_asc))  # List[Tuple[str, float]]
+    sorted_bw_subset = sorted_bw_desc[:num_proteins]
     return sorted_bw_subset
 
 
 def get_num_corum_complexes(df: DataFrame) -> int:
-    return 0
+    unique_complexes = df["CORUM_complex_2022"].dropna().unique()  # ndarray
+    return len(unique_complexes)
 
 
 def get_top_betweenness_complexes(df: DataFrame,
