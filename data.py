@@ -1,15 +1,17 @@
 # from bokeh.core.properties import DashPattern
 from enum import Enum
-from pandas import DataFrame, concat
+from pandas import DataFrame, concat, Series
 from matplotlib.pyplot import cm
 from numpy import nan
-
-from typing import Dict, Hashable, List
 
 from buttons import dataset_combined_checkbox_button, dataset_checkbox_button
 from buttons import interaction_type_checkbox_button
 from colors import EdgeColors, LifecycleColorsDict, LifecycleColors
 import controls
+
+from itertools import permutations
+from typing import Dict, Hashable, List, Set
+from pdb import set_trace
 
 
 class Dataset(Enum):
@@ -146,7 +148,7 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
     })
 
     interaction_type = interaction_type_checkbox_button.active  # List[int]
-    types_to_include = []
+    types_to_include = []  # List[Union[str, float]]
 
     if len(interaction_type) == 0:
         return df
@@ -160,6 +162,10 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
 
     if InteractionTypeCheckbox.shielded.value in interaction_type:
         types_to_include.append(InteractionTypeValue.shielded.value)
+
+    # Always include undetermined and nan edges
+    types_to_include.append("undetermined")
+    types_to_include.append(nan)
 
     # Only consider edges with IP or IP & SEC for IP interaction type filtering
     ip_mask = df_copy["Interaction_support"].isin(["IP", "both"])  # Series
@@ -212,10 +218,27 @@ def subset_by_protein(df: DataFrame) -> DataFrame:
     if (len(protein_list) == 1) and (protein_list[0] == ""):
         return df
     else:
-        num_neighbors_value = controls.num_neighbors_selection.value  # str
-        num_neighbors = int(num_neighbors_value) - 1
-        filtered_df = filter_by_dfs(df, protein_list, num_neighbors)
-        return filtered_df
+        num_neighbors_string: str = str(controls.num_neighbors_selection.value)
+        num_neighbors: int = int(num_neighbors_string)
+
+        # Get all preys for our baits of interest
+        prey_df = df[df["Bait"].isin(protein_list)].copy()
+        preys = prey_df["Prey"].values
+
+        # Keep track row numbers for final edge list
+        rows_to_include: Set[int] = set()
+        rows_to_include.update(set(prey_df.index))
+
+        for _ in range(num_neighbors):
+            prey_prey_permutations: permutations = permutations(preys, 2)
+            edge_list: DataFrame = df[["Bait", "Prey"]].apply(tuple, axis=1)
+            mask: Series = edge_list.isin(prey_prey_permutations)
+            subset_df: DataFrame = df[mask].copy()
+            rows_to_include.update(set(subset_df.index))
+
+            preys = subset_df["Prey"].values
+
+        return df.loc[list(rows_to_include)].copy()
 
 
 def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
