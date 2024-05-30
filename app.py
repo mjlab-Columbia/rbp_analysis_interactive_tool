@@ -171,11 +171,11 @@ def subset_dataframe() -> DataFrame:
     """
     df = global_df.copy()
     remapped_df = remap_df(df)
-    node_filtered_df = subset_by_node_type(remapped_df)
+    protein_filtered_df = subset_by_protein(remapped_df)
+    node_filtered_df = subset_by_node_type(protein_filtered_df)
     edge_filtered_df = subset_by_edge_type(node_filtered_df)
-    protein_filtered_df = subset_by_protein(edge_filtered_df)
 
-    return protein_filtered_df
+    return edge_filtered_df
 
 
 def get_edges(df: DataFrame,
@@ -295,20 +295,16 @@ def update() -> None:
 
     # Account for the "color by" selection menu
     clustering_method = str(controls.graph_clustering_selection.value)  # str
-    resolution = float(controls.clustering_resolution.value)  # float
+    clustering_resolution = float(controls.clustering_resolution.value)  # float
     init_node_coloring = determine_node_coloring(df)
     clustering_output = get_clustered_coloring(graph,
                                                method=clustering_method,
-                                               res=resolution,
+                                               res=clustering_resolution,
                                                node_coloring=init_node_coloring)
     new_node_coloring, clusters = clustering_output
 
     # Get new summary statistics based on new subsetting of the dataframe/graph
-    new_stats = get_graph_statistics(df,
-                                     graph,
-                                     num_proteins=5,
-                                     num_complexes=5,
-                                     clusters=clusters)  # str
+    new_stats: str = get_graph_statistics(df, graph, num_proteins=5, num_complexes=5, clusters=clusters)
     statistics_info.text = new_stats
 
     new_node_colors = []  # List[str]
