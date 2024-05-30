@@ -5,7 +5,7 @@ from tqdm import tqdm
 import networkx as nx
 from pandas import DataFrame, read_csv
 
-from clustering import get_clustered_coloring
+from clustering import create_cluster_graph
 
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
@@ -258,86 +258,114 @@ def update() -> None:
                                     edge_attr=["edge_color", "edge_style"],
                                     create_using=nx.DiGraph)
 
-    # TODO: Relocate this to initial ColumnDataSource declaration
-    node_sizes = [12 for _ in range(len(graph.nodes()))]  # List[int]
-
-    # Layout is a mapping of nodes --> coordinates
-    layout = nx.spring_layout(graph)  # Dict[str, ndarray]
-
-    # Show protein names only if the LABELS checkbox is active
-    if controls.apply_labels_checkbox.active:
-        new_node_names = list(layout.keys())  # List[str]
-    else:
-        new_node_names = ["" for _ in layout.keys()]
-
-    node_coordinates = zip(*layout.values())
-    node_x, node_y = node_coordinates
-
-    datasets_toggled = dataset_checkbox_button.active
-    if Dataset.CORUM.value in datasets_toggled:
-        # TODO: Find way to dynamically set alpha based on node_size
-        alpha = 5e-5
-        new_edges_out = get_edges(df, graph, layout, alpha)
-        new_edges, new_ppi_edges, new_edge_colors, new_edge_styles = new_edges_out
-        edge_x, edge_y = new_edges
-        ppi_x, ppi_y = new_ppi_edges
-    else:
-        edge_x = [[layout[source][0], layout[target][0]]
-                  for source, target in graph.edges()]
-        edge_y = [[layout[source][1], layout[target][1]]
-                  for source, target in graph.edges()]
-
-        edge_data = list(graph.edges(data=True))
-        new_edge_colors = [attr["edge_color"] for _, _, attr in edge_data]
-        new_edge_styles = [attr["edge_style"] for _, _, attr in edge_data]
-
-        ppi_x, ppi_y = [], []
-
-    # Account for the "color by" selection menu
     clustering_method = str(controls.graph_clustering_selection.value)  # str
-    clustering_resolution = float(controls.clustering_resolution.value)  # float
-    init_node_coloring = determine_node_coloring(df)
-    clustering_output = get_clustered_coloring(graph,
-                                               method=clustering_method,
-                                               res=clustering_resolution,
-                                               node_coloring=init_node_coloring)
-    new_node_coloring, clusters = clustering_output
 
-    # Get new summary statistics based on new subsetting of the dataframe/graph
-    new_stats: str = get_graph_statistics(df, graph, num_proteins=5, num_complexes=5, clusters=clusters)
-    statistics_info.text = new_stats
+    if clustering_method == "no clustering":
+        # TODO: Relocate this to initial ColumnDataSource declaration
+        node_sizes = [12 for _ in range(len(graph.nodes()))]  # List[int]
 
-    new_node_colors = []  # List[str]
-    for node in layout.keys():
-        if node in new_node_coloring:
-            color = new_node_coloring[node]["node_color"]
-            new_node_colors.append(color)
+        # Layout is a mapping of nodes --> coordinates
+        layout = nx.spring_layout(graph)  # Dict[str, ndarray]
+
+        # Show protein names only if the LABELS checkbox is active
+        if controls.apply_labels_checkbox.active:
+            new_node_names = list(layout.keys())  # List[str]
         else:
-            new_node_colors.append(GRAY)
+            new_node_names = ["" for _ in layout.keys()]
 
-    source_nodes.data = dict(
-        xs=node_x,
-        ys=node_y,
-        names=new_node_names,
-        color=new_node_colors,
-        node_size=node_sizes,
-        label=new_node_names,
-    )
+        node_coordinates = zip(*layout.values())
+        node_x, node_y = node_coordinates
 
-    source_edges.data = dict(
-        xs=edge_x,
-        ys=edge_y,
-        line_dash=new_edge_styles,
-        line_color=new_edge_colors,
-    )
+        datasets_toggled = dataset_checkbox_button.active
+        if Dataset.CORUM.value in datasets_toggled:
+            # TODO: Find way to dynamically set alpha based on node_size
+            alpha = 5e-5
+            new_edges_out = get_edges(df, graph, layout, alpha)
+            new_edges, new_ppi_edges, new_edge_colors, new_edge_styles = new_edges_out
+            edge_x, edge_y = new_edges
+            ppi_x, ppi_y = new_ppi_edges
+        else:
+            edge_x = [[layout[source][0], layout[target][0]]
+                      for source, target in graph.edges()]
+            edge_y = [[layout[source][1], layout[target][1]]
+                      for source, target in graph.edges()]
 
-    ppi_edges.data = dict(
-        xs=ppi_x,
-        ys=ppi_y,
+            edge_data = list(graph.edges(data=True))
+            new_edge_colors = [attr["edge_color"] for _, _, attr in edge_data]
+            new_edge_styles = [attr["edge_style"] for _, _, attr in edge_data]
 
-        # TODO: Replace with "solid" in ColumnDataSource declaration
-        line_dash=[[] for _ in ppi_x]
-    )
+            ppi_x, ppi_y = [], []
+
+        # Account for the "color by" selection menu
+        init_node_coloring = determine_node_coloring(df)
+
+        # Get new summary statistics based on new subsetting of the dataframe/graph
+        new_stats: str = get_graph_statistics(df, graph, num_proteins=5, num_complexes=5, clusters=None)
+        statistics_info.text = new_stats
+
+        new_node_colors = []  # List[str]
+        for node in layout.keys():
+            if node in init_node_coloring:
+                color = init_node_coloring[node]["node_color"]
+                new_node_colors.append(color)
+            else:
+                new_node_colors.append(GRAY)
+
+        source_nodes.data = dict(
+            xs=node_x,
+            ys=node_y,
+            names=new_node_names,
+            color=new_node_colors,
+            node_size=node_sizes,
+            label=new_node_names,
+        )
+
+        source_edges.data = dict(
+            xs=edge_x,
+            ys=edge_y,
+            line_dash=new_edge_styles,
+            line_color=new_edge_colors,
+        )
+
+        ppi_edges.data = dict(xs=ppi_x, ys=ppi_y, line_dash=[[] for _ in ppi_x])
+    else:
+        # Account for the "color by" selection menu
+        init_node_coloring = determine_node_coloring(df)
+
+        clustering_resolution: float = float(controls.clustering_resolution.value)
+        cluster_graph = create_cluster_graph(graph=graph,
+                                             method=clustering_method,
+                                             res=clustering_resolution,
+                                             node_coloring=init_node_coloring)
+
+        layout = nx.spring_layout(cluster_graph, weight=None)
+
+        node_coordinates = zip(*layout.values())
+        node_x, node_y = node_coordinates
+
+        edge_x = [[layout[source][0], layout[target][0]]
+                  for source, target in cluster_graph.edges()]
+        edge_y = [[layout[source][1], layout[target][1]]
+                  for source, target in cluster_graph.edges()]
+
+        new_node_colors = [color for node, color in nx.get_node_attributes(cluster_graph, "color").items()]
+        new_node_sizes = [size for node, size in nx.get_node_attributes(cluster_graph, "size").items()]
+
+        source_nodes.data = dict(
+            xs=node_x,
+            ys=node_y,
+            names=[str(node) for node in cluster_graph.nodes()],
+            color=new_node_colors,
+            node_size=new_node_sizes,
+            label=[str(node) for node in cluster_graph.nodes()],
+        )
+
+        source_edges.data = dict(
+            xs=edge_x,
+            ys=edge_y,
+            line_dash=[[] for _ in cluster_graph.edges()],
+            line_color=[GRAY for _ in cluster_graph.edges()],
+        )
 
     # Set callback on each update to ensure only subset_df is downloaded
     download_button.js_on_click(
