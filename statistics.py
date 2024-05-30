@@ -80,9 +80,7 @@ def get_num_corum_complexes(df: DataFrame) -> int:
     return len(unique_complexes)
 
 
-def get_top_betweenness_complexes(df: DataFrame,
-                                  num_complexes: int = 5) -> int:
-
+def get_top_betweenness_complexes(df: DataFrame, num_complexes: int = 5) -> int:
     return 0
 
 
@@ -108,9 +106,7 @@ def get_graph_statistics(df: DataFrame,
     sec_interactions = get_number_of_sec_interactions(df)  # int
     ip_interactions = get_number_of_ip_interactions(df)  # int
 
-    bw_proteins = get_top_betweenness_proteins(df=df,
-                                               graph=graph,
-                                               num_proteins=5)
+    bw_proteins = get_top_betweenness_proteins(df=df, graph=graph, num_proteins=5)
 
     top_proteins = [protein for protein, _ in bw_proteins]  # List[str]
 
@@ -143,19 +139,15 @@ def get_graph_statistics(df: DataFrame,
     top_five_proteins = f"{preamble}\n{protein_list}"
 
     if clusters is None:
-        stats_list = [node_stats, interaction_type_stats,
-                      interaction_origin_stats, top_five_proteins]  # List[str]
+        stats_list = [node_stats, interaction_type_stats, interaction_origin_stats, top_five_proteins]  # List[str]
         stats_string = "\n\n".join(stats_list)  # str
     else:
         num_complexes = get_num_corum_complexes(df)  # int
 
         norm_bw_filepath = "SupplementalTable_8.xlsx"  # str
-        norm_bw_df = read_excel(norm_bw_filepath,
-                                sheet_name=1,
-                                index_col=0)  # DataFrame
+        norm_bw_df = read_excel(norm_bw_filepath, sheet_name=1, index_col=0)  # DataFrame
         norm_bw_df.reset_index(inplace=True)  # None
-        norm_bw_df.columns = ["protein",
-                              "bw_centrality", "is_bait"]  # List[str]
+        norm_bw_df.columns = ["protein", "bw_centrality", "is_bait"]  # List[str]
 
         # Populate dict with most common CORUM complex per cluster and median
         # betweenness centrality of proteins in cluster
