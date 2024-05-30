@@ -9,7 +9,7 @@ from pdb import set_trace
 # Mypy type aliases for brevity
 NodeColoring = Dict[Hashable, Dict[str, str]]
 Clusters = List[Tuple[str]]
-ClusteredColoring = Tuple[Dict[str, str], Union[Clusters, None]]
+ClusteredColoring = Tuple[Dict[Hashable, Dict[str, str]], Union[Clusters, None]]
 
 
 def generate_clusters(graph: nx.Graph,
@@ -90,7 +90,7 @@ def get_clustered_coloring(graph: nx.Graph,
             subgraph_colorings.append(majority_coloring)
 
         # TODO: Resolve the "Need type annotation error" for new_node_colors
-        new_node_colors = {}  # Dict[str, str]
+        new_node_colors: Dict[Hashable, Dict[str, str]] = {}
         for coloring in subgraph_colorings:
             new_node_colors |= coloring
 
