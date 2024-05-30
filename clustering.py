@@ -3,7 +3,8 @@ import networkx as nx
 from scipy.sparse import csr_matrix
 import markov_clustering as mc
 from os import system
-from typing import List, Tuple, Dict, Union, Hashable
+from typing import List, Tuple, Dict, Union, Hashable, Any
+from itertools import combinations
 from pdb import set_trace
 
 # Mypy type aliases for brevity
@@ -18,6 +19,7 @@ def generate_clusters(graph: nx.Graph,
     """
     Create node clusters based on a graph, clustering method, and resolution
     """
+    print(f"Performing {method} clustering")
 
     if method == "louvain":
         res = 1 + (5 * res)
@@ -60,44 +62,55 @@ def generate_clusters(graph: nx.Graph,
     return clusters
 
 
-def get_clustered_coloring(graph: nx.Graph,
-                           method: str,
-                           res: float,
-                           node_coloring: NodeColoring) -> ClusteredColoring:
-    """
-    Clusters graph based on one of several methods and returns
-    coloring dictionary with majority color within each cluster
-    """
+def get_edges_between_subgraphs(graph: nx.DiGraph,
+                                group1: Tuple[str],
+                                group2: Tuple[str]) -> List[Tuple[Any, Any]]:
+    subgraph1 = graph.subgraph(group1)
+    subgraph2 = graph.subgraph(group2)
 
-    # Only recolor nodes if we're clustering
-    if method != "no clustering":
-        clusters = generate_clusters(graph, method, res)  # List[Tuple[str]]
-        subgraph_colorings = []  # List[Dict[str, Dict[str, str]]]
+    shared_edges = [(source, target) for source, target in graph.edges()
+                    if source in subgraph1 and target in subgraph1
+                    or source in subgraph2 and target in subgraph2]
 
-        for cluster in clusters:
-            subgraph = graph.subgraph(cluster)  # nx.Graph
-            nodes = set(subgraph.nodes())  # Set[str]
-            node_colors = {k: v["node_color"]
-                           for k, v in node_coloring.items()
-                           if k in nodes}
+    return shared_edges
 
-            # Find the color that appears the most often in the cluster
-            all_colors = list(node_colors.values())  # List[str]
-            majority_color = max(set(all_colors),
-                                 key=all_colors.count)  # str
-            majority_coloring = {k: {"node_color": majority_color}
-                                 for k in subgraph.nodes()}  # Dict[str, str]
-            subgraph_colorings.append(majority_coloring)
 
-        # TODO: Resolve the "Need type annotation error" for new_node_colors
-        new_node_colors: Dict[Hashable, Dict[str, str]] = {}
-        for coloring in subgraph_colorings:
-            new_node_colors |= coloring
+def create_cluster_graph(graph: nx.DiGraph,
+                         method: str,
+                         res: float,
+                         node_coloring: NodeColoring) -> nx.DiGraph:
 
-        return new_node_colors, clusters
-    else:
-        # TODO: Visualize the clusters even if "Color nodes by" is none
-        # New node colors = old node colors if we're not clustering
-        new_node_colors = {k: {"node_color": v["node_color"]}
-                           for k, v in node_coloring.items()}
-        return new_node_colors, None
+    # Generate list of node clusters based on the method
+    clusters = generate_clusters(graph=graph, res=res, method=method)
+    cluster_indices = [i for i in range(len(clusters))]
+    cluster_pairs = [combo for combo in combinations(cluster_indices, 2)]
+    cluster_graph = nx.DiGraph()
+
+    # For every cluster pair in n Choose 2, determine the edge and its attributes
+    for group1_idx, group2_idx in cluster_pairs:
+        shared_edges = get_edges_between_subgraphs(graph,
+                                                   clusters[group1_idx],
+                                                   clusters[group2_idx])
+
+        if len(shared_edges) != 0:
+            cluster_graph.add_edge(group1_idx, group2_idx, weight=len(shared_edges))
+
+            group1_coloring = [node_coloring[node]["node_color"] for node in clusters[group1_idx]]
+            group2_coloring = [node_coloring[node]["node_color"] for node in clusters[group2_idx]]
+
+            group1_majority_color = max(set(group1_coloring), key=group1_coloring.count)
+            group2_majority_color = max(set(group2_coloring), key=group2_coloring.count)
+
+            size_attr = {group1_idx: len(clusters[group1_idx]),
+                         group2_idx: len(clusters[group2_idx])}
+
+            color_attr = {group1_idx: group1_majority_color,
+                          group2_idx: group2_majority_color}
+
+            nx.set_node_attributes(cluster_graph, size_attr, "size")
+            nx.set_node_attributes(cluster_graph, color_attr, "color")
+        else:
+            cluster_graph.add_node(group1_idx)
+            cluster_graph.add_node(group2_idx)
+
+    return cluster_graph
