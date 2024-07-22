@@ -149,22 +149,27 @@ def subset_by_edge_type(df: DataFrame) -> DataFrame:
     interaction_type: List[int] = interaction_type_checkbox_button.active
     types_to_include: List[Union[str, float]] = []
 
+    # If nothing is toggled, include all types of edges/interactions
     if len(interaction_type) == 0:
-        return df
+        types_to_include = [InteractionTypeValue.direct.value,
+                            InteractionTypeValue.mediated.value,
+                            InteractionTypeValue.shielded.value,
+                            "undetermined",
+                            nan]
+    elif len(interaction_type) > 0:
+        # TODO: This logic can be simpler, so figure out a simplification
+        if InteractionTypeCheckbox.direct.value in interaction_type:
+            types_to_include.append(InteractionTypeValue.direct.value)
 
-    # TODO: This logic can be simpler, so figure out a simplification
-    if InteractionTypeCheckbox.direct.value in interaction_type:
-        types_to_include.append(InteractionTypeValue.direct.value)
+        if InteractionTypeCheckbox.mediated.value in interaction_type:
+            types_to_include.append(InteractionTypeValue.mediated.value)
 
-    if InteractionTypeCheckbox.mediated.value in interaction_type:
-        types_to_include.append(InteractionTypeValue.mediated.value)
+        if InteractionTypeCheckbox.shielded.value in interaction_type:
+            types_to_include.append(InteractionTypeValue.shielded.value)
 
-    if InteractionTypeCheckbox.shielded.value in interaction_type:
-        types_to_include.append(InteractionTypeValue.shielded.value)
-
-    # Always include undetermined and nan edges
-    types_to_include.append("undetermined")
-    types_to_include.append(nan)
+        # Always include undetermined and nan edges
+        types_to_include.append("undetermined")
+        types_to_include.append(nan)
 
     # Only consider edges with IP or IP & SEC for IP interaction type filtering
     ip_mask: Series = df_copy["Interaction_support"].isin(["IP", "both"])
