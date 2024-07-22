@@ -232,13 +232,9 @@ def subset_by_protein(df: DataFrame) -> DataFrame:
         rows_to_include: Set[int] = set()
         rows_to_include.update(set(prey_df.index))
 
-        for _ in range(num_neighbors):
-            prey_prey_permutations: permutations = permutations(preys, 2)
-            edge_list: DataFrame = df[["Bait", "Prey"]].apply(tuple, axis=1)
-            mask: Series = edge_list.isin(prey_prey_permutations)
-            subset_df: DataFrame = df[mask].copy()
+        for _ in range(num_neighbors - 1):
+            subset_df = df[df["Bait"].isin(preys) | df["Prey"].isin(preys)].copy()
             rows_to_include.update(set(subset_df.index))
-
             preys = subset_df["Prey"].values
 
         return df.loc[list(rows_to_include)].copy()
