@@ -194,6 +194,8 @@ def get_edges(df: DataFrame,
     # If above statement didn't return anything, we render CORUM edges
     for edge in progress_bar:
         # Undirected edge is: (s_x, s_y) <--> (t_x, t_y)
+        # Directed edge is: (s_x, s_y) --> (t_x, t_y)
+        # s = source, t = target
         source = edge[0]
         target = edge[1]
         source_coordinates = layout[source]
@@ -366,6 +368,8 @@ def update() -> None:
             line_dash=[[] for _ in cluster_graph.edges()],
             line_color=[GRAY for _ in cluster_graph.edges()],
         )
+
+        ppi_edges.data = dict(xs=[], ys=[], line_dash=[])
 
     # Set callback on each update to ensure only subset_df is downloaded
     download_button.js_on_click(
