@@ -36,11 +36,15 @@ EdgeStyles = List[List[int]]
 # TODO: Turn type comments into mypy type annotations
 
 # GLOBAL
+TOOLTIPS = [
+    ("", "@node_category")
+]
 graph_viewer = figure(
     height=600,
     width=800,
-    tools=["pan", "wheel_zoom", "save", "reset"],
-    active_scroll="wheel_zoom"
+    tools=["pan", "wheel_zoom", "save", "reset", "hover"],
+    active_scroll="wheel_zoom",
+    tooltips=TOOLTIPS
 )
 
 # Create Column Data Source that will be used by the plot
@@ -72,7 +76,7 @@ graph_viewer.multi_line(
     width=1
 )
 
-graph_viewer.scatter(
+scatter = graph_viewer.scatter(
     'xs',
     'ys',
     fill_color='color',
@@ -306,12 +310,16 @@ def update() -> None:
         statistics_info.text = new_stats
 
         new_node_colors = []  # List[str]
+        new_node_category: List[str] = []
         for node in layout.keys():
             if node in init_node_coloring:
                 color = init_node_coloring[node]["node_color"]
+                category = init_node_coloring[node]["legend_label"]
                 new_node_colors.append(color)
+                new_node_category.append(category)
             else:
                 new_node_colors.append(GRAY)
+                new_node_colors.append("N/A")
 
         source_nodes.data = dict(
             xs=node_x,
@@ -319,6 +327,7 @@ def update() -> None:
             names=new_node_names,
             color=new_node_colors,
             node_size=node_sizes,
+            node_category=new_node_category,
             label=new_node_names,
         )
 
@@ -385,6 +394,8 @@ primary_div = Div(
     text=open(join(dirname(__file__), "Interactome.html")).read(),
     sizing_mode="stretch_width"
 )
+
+graph_viewer.hover.renderers = [scatter]
 
 create_interactome_button.on_click(update)
 control_inputs = column(*controls.all_controls, width=300)

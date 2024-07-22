@@ -277,7 +277,7 @@ def lifecycle_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
             node_color = LifecycleColors.undetermined.value
 
         attributes: Dict[str, str] = {
-            "legend_label": lifecycle_step,
+            "legend_label": "Lifecycle step: " + lifecycle_step,
             "node_color": node_color
         }
         node_attributes[protein] = attributes
@@ -326,7 +326,10 @@ def location_node_attributes(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
 
     # node --> {"node_attribute": color}
     node_attributes: Dict[Hashable, Dict[str, str]] = {
-        key: {"node_color": rgba_to_hex(*color_dict[value])}
+        key: {
+            "node_color": rgba_to_hex(*color_dict[value]),
+            "legend_label": f"Location: {value}"
+        }
         for key, value in combined_location_dict.items()
     }
 
@@ -375,7 +378,10 @@ def disease_node_attribute(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
     # node --> {"node_color": disease color}
     # Note: RGBA tuple -> rgba_to_hex(*RGBA) -> rgba_to_hex(R, G, B, A) -> hex
     node_attributes: Dict[Hashable, Dict[str, str]] = {
-        key: {"node_color": rgba_to_hex(*color_dict[value])}
+        key: {
+            "node_color": rgba_to_hex(*color_dict[value]),
+            "legend_label": f"Disease: {value}"
+        }
         for key, value in combined_disease_dict.items()
     }
 
@@ -392,7 +398,7 @@ def determine_node_coloring(df: DataFrame) -> Dict[Hashable, Dict[str, str]]:
 
         no_attributes: Dict[Hashable, Dict[str, str]] = {
             protein: {"node_color": LifecycleColors.undetermined.value,
-                      "legend_label": "Other"}
+                      "legend_label": "N/A"}
             for protein in proteins
         }
         return no_attributes
