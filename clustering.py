@@ -3,7 +3,7 @@ import networkx as nx
 from scipy.sparse import csr_matrix
 import markov_clustering as mc
 from os import system
-from typing import List, Tuple, Dict, Union, Hashable, Any
+from typing import List, Tuple, Dict, Union, Hashable, Any, Set
 from itertools import combinations
 from pdb import set_trace
 
@@ -80,11 +80,17 @@ def create_cluster_graph(graph: nx.DiGraph,
                          res: float,
                          node_coloring: NodeColoring) -> nx.DiGraph:
 
+    # Only cluster nodes for which we have color information
+    colored_nodes: Set[str] = set(node_coloring.keys())
+    graph_nodes: Set[str] = set(graph.nodes())
+    nodes_to_cluster: Set[str] = colored_nodes.intersection(graph_nodes)
+    colored_subgraph: nx.DiGraph = graph.subgraph(nodes_to_cluster)
+
     # Generate list of node clusters based on the method
-    clusters = generate_clusters(graph=graph, res=res, method=method)
-    cluster_indices = [i for i in range(len(clusters))]
-    cluster_pairs = [combo for combo in combinations(cluster_indices, 2)]
-    cluster_graph = nx.DiGraph()
+    clusters: List[Tuple[str]] = generate_clusters(graph=colored_subgraph, res=res, method=method)
+    cluster_indices: List[int] = [i for i in range(len(clusters))]
+    cluster_pairs: List[Tuple[int, int]] = [combo for combo in combinations(cluster_indices, 2)]
+    cluster_graph: nx.DiGraph = nx.DiGraph()
 
     # For every cluster pair in n Choose 2, determine the edge and its attributes
     for group1_idx, group2_idx in cluster_pairs:
