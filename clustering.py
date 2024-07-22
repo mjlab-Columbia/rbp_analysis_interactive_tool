@@ -78,7 +78,7 @@ def get_edges_between_subgraphs(graph: nx.DiGraph,
 def create_cluster_graph(graph: nx.DiGraph,
                          method: str,
                          res: float,
-                         node_coloring: NodeColoring) -> nx.DiGraph:
+                         node_coloring: NodeColoring) -> Tuple[nx.DiGraph, Dict[int, str]]:
 
     # Only cluster nodes for which we have color information
     colored_nodes: Set[str] = set(node_coloring.keys())
@@ -119,4 +119,5 @@ def create_cluster_graph(graph: nx.DiGraph,
             cluster_graph.add_node(group1_idx)
             cluster_graph.add_node(group2_idx)
 
-    return cluster_graph
+    nodes_per_cluster = {idx: clusters[idx] for idx in cluster_graph.nodes()}
+    return cluster_graph, nodes_per_cluster

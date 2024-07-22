@@ -37,7 +37,7 @@ EdgeStyles = List[List[int]]
 
 # GLOBAL
 TOOLTIPS = [
-    ("", "@node_category")
+    ("", "@node_category{safe}")
 ]
 graph_viewer = figure(
     height=600,
@@ -344,10 +344,10 @@ def update() -> None:
         init_node_coloring = determine_node_coloring(df)
 
         clustering_resolution: float = float(controls.clustering_resolution.value)
-        cluster_graph = create_cluster_graph(graph=graph,
-                                             method=clustering_method,
-                                             res=clustering_resolution,
-                                             node_coloring=init_node_coloring)
+        cluster_graph, nodes_per_cluster = create_cluster_graph(graph=graph,
+                                                                method=clustering_method,
+                                                                res=clustering_resolution,
+                                                                node_coloring=init_node_coloring)
 
         layout = nx.spring_layout(cluster_graph, weight=None)
 
@@ -361,6 +361,7 @@ def update() -> None:
 
         new_node_colors = [color for node, color in nx.get_node_attributes(cluster_graph, "color").items()]
         new_node_sizes = [size for node, size in nx.get_node_attributes(cluster_graph, "size").items()]
+        new_node_category = ["<br>".join(node_group) for node_group in nodes_per_cluster.values()]
 
         source_nodes.data = dict(
             xs=node_x,
@@ -368,6 +369,7 @@ def update() -> None:
             names=[str(node) for node in cluster_graph.nodes()],
             color=new_node_colors,
             node_size=new_node_sizes,
+            node_category=new_node_category,
             label=[str(node) for node in cluster_graph.nodes()],
         )
 
