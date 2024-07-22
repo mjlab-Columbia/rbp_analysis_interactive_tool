@@ -4,7 +4,7 @@ from pandas import DataFrame, concat, Series
 from matplotlib.pyplot import cm
 from numpy import nan
 
-from buttons import dataset_combined_checkbox_button, dataset_checkbox_button
+from buttons import interaction_support_checkbox_button, dataset_checkbox_button
 from buttons import interaction_type_checkbox_button
 from colors import EdgeColors, LifecycleColorsDict, LifecycleColors
 import controls
@@ -17,11 +17,11 @@ from pdb import set_trace
 class Dataset(Enum):
     IP: int = 0
     SEC: int = 1
-    CORUM: int = 2
 
 
-class CombinedDataset(Enum):
+class InteractionSupport(Enum):
     IP_and_SEC: int = 0
+    CORUM: int = 1
 
 
 class InteractionTypeCheckbox(Enum):
@@ -86,7 +86,7 @@ def rgba_to_hex(r, g, b, a) -> str:
 def subset_by_node_type(df: DataFrame) -> DataFrame:
     """
     Return the baits corresponding to the dataset the user selected via
-    `dataset_checkbox_button` and `dataset_combined_checkbox_button`
+    `dataset_checkbox_button` and `interaction_support_checkbox_button`
     """
 
     # Each type of interaction has a color
@@ -96,7 +96,7 @@ def subset_by_node_type(df: DataFrame) -> DataFrame:
         "both": EdgeColors.Both.value
     })
     datasets: List[int] = dataset_checkbox_button.active
-    ip_and_sec_toggle: List[int] = dataset_combined_checkbox_button.active
+    ip_and_sec_toggle: List[int] = interaction_support_checkbox_button.active
 
     # Group combinations of toggles
     ip_bool: bool = Dataset.IP.value in datasets
@@ -105,7 +105,7 @@ def subset_by_node_type(df: DataFrame) -> DataFrame:
     ip_only: bool = (ip_bool) and (not sec_bool)
     sec_only: bool = (sec_bool) and (not ip_bool)
     ip_or_sec: bool = (ip_bool) and (sec_bool)
-    ip_and_sec: bool = CombinedDataset.IP_and_SEC.value in ip_and_sec_toggle
+    ip_and_sec: bool = InteractionSupport.IP_and_SEC.value in ip_and_sec_toggle
 
     # A mask tells us which rows of the dataframe (df) to return
     ip_mask: Series = df["Interaction_support"] == "IP"

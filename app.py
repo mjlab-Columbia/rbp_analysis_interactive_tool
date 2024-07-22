@@ -15,11 +15,11 @@ from bokeh.models import CustomJS
 from bokeh.plotting import figure
 
 from buttons import create_interactome_button, download_button
-from buttons import dataset_checkbox_button
+from buttons import dataset_checkbox_button, interaction_support_checkbox_button
 import controls
 from colors import EdgeColors, GRAY, PPI_SUPPORT, LifecycleColorsDict
 from data import subset_by_protein, subset_by_edge_type, subset_by_node_type
-from data import remap_df, determine_node_coloring, Dataset
+from data import remap_df, determine_node_coloring, InteractionSupport
 
 from numpy import ndarray
 
@@ -278,8 +278,8 @@ def update() -> None:
         node_coordinates = zip(*layout.values())
         node_x, node_y = node_coordinates
 
-        datasets_toggled = dataset_checkbox_button.active
-        if Dataset.CORUM.value in datasets_toggled:
+        interaction_support_toggled = interaction_support_checkbox_button.active
+        if InteractionSupport.CORUM.value in interaction_support_toggled:
             # TODO: Find way to dynamically set alpha based on node_size
             alpha = 5e-5
             new_edges_out = get_edges(df, graph, layout, alpha)
