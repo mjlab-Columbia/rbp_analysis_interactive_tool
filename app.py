@@ -1,10 +1,11 @@
 from os.path import dirname, join
+from tqdm import tqdm
 
 # TODO: Only import functions that are used from networkx
 import networkx as nx
 from pandas import DataFrame, read_csv
 
-from clustering import get_clustered_coloring
+from clustering import create_cluster_graph
 
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
@@ -14,16 +15,19 @@ from bokeh.models import CustomJS
 from bokeh.plotting import figure
 
 from buttons import create_interactome_button, download_button
+from buttons import dataset_checkbox_button, interaction_support_checkbox_button
 import controls
-from colors import EdgeColors, GRAY, PPI_SUPPORT
+from colors import EdgeColors, GRAY, PPI_SUPPORT, LifecycleColorsDict
 from data import subset_by_protein, subset_by_edge_type, subset_by_node_type
-from data import remap_df, determine_node_coloring
+from data import remap_df, determine_node_coloring, InteractionSupport
 
 from numpy import ndarray
 
 from statistics import get_graph_statistics
 
 from typing import List, Tuple, Dict
+
+from pdb import set_trace
 
 # Type aliases for readability
 Edges = Tuple[List[List[float]], List[List[float]]]
@@ -32,11 +36,15 @@ EdgeStyles = List[List[int]]
 # TODO: Turn type comments into mypy type annotations
 
 # GLOBAL
+TOOLTIPS = [
+    ("", "@node_category{safe}")
+]
 graph_viewer = figure(
     height=600,
     width=800,
-    tools=["pan", "wheel_zoom", "save", "reset"],
-    active_scroll="wheel_zoom"
+    tools=["pan", "wheel_zoom", "save", "reset", "hover"],
+    active_scroll="wheel_zoom",
+    tooltips=TOOLTIPS
 )
 
 # Create Column Data Source that will be used by the plot
@@ -68,7 +76,7 @@ graph_viewer.multi_line(
     width=1
 )
 
-graph_viewer.scatter(
+scatter = graph_viewer.scatter(
     'xs',
     'ys',
     fill_color='color',
@@ -100,7 +108,7 @@ edge_legend_map = {
     "Both": {"line_color": EdgeColors.Both.value, "line_dash": "solid"},
 }
 
-legend_items = []
+edge_legend_items = []
 for label, attr in edge_legend_map.items():
     renderer = graph_viewer.line(
         [0],
@@ -109,17 +117,52 @@ for label, attr in edge_legend_map.items():
         line_dash=attr["line_dash"]
     )
     legend_item = LegendItem(label=label, renderers=[renderer])
-    legend_items.append(legend_item)
+    edge_legend_items.append(legend_item)
 
-legend = Legend(
-    items=legend_items,
+edge_legend = Legend(
+    items=edge_legend_items,
     location="right",
     orientation='vertical',
     label_text_font_size='6pt'
 )
 
-# Add static legends around the graph
-graph_viewer.add_layout(legend, 'right')
+# Add static legend for edges to the right of the graph display
+graph_viewer.add_layout(edge_legend, 'right')
+
+# Create legend for nodes
+node_legend_map = {
+    "3' end processing": {"node_color": LifecycleColorsDict["3' end processing"]},
+    "decay": {"node_color": LifecycleColorsDict["decay"]},
+    "export": {"node_color": LifecycleColorsDict["export"]},
+    "localization": {"node_color": LifecycleColorsDict["localization"]},
+    "modification": {"node_color": LifecycleColorsDict["modification"]},
+    "splicing": {"node_color": LifecycleColorsDict["splicing"]},
+    "transcription": {"node_color": LifecycleColorsDict["transcription"]},
+    "translation": {"node_color": LifecycleColorsDict["translation"]},
+    "other": {"node_color": LifecycleColorsDict["undetermined"]},
+}  # Dict[Hashable, Dict[str, str]]
+
+node_legend_items = []  # List[GlyphRenderer]
+for label, attr in node_legend_map.items():
+    renderer = graph_viewer.scatter(
+        [0],
+        [0],
+        [0],
+        marker=['circle'],
+        color=attr["node_color"]
+    )
+    legend_item = LegendItem(label=label, renderers=[renderer])
+    node_legend_items.append(legend_item)
+
+node_legend = Legend(
+    items=node_legend_items,
+    location="bottom_center",
+    orientation="horizontal",
+    label_text_font_size="6pt"
+)
+
+# Add static legend for node colors below the graph display
+graph_viewer.add_layout(node_legend, "below")
 
 # Other
 statistics_info = PreText(text="Graph Statistics:", width=300)
@@ -132,11 +175,11 @@ def subset_dataframe() -> DataFrame:
     """
     df = global_df.copy()
     remapped_df = remap_df(df)
-    node_filtered_df = subset_by_node_type(remapped_df)
+    protein_filtered_df = subset_by_protein(remapped_df)
+    node_filtered_df = subset_by_node_type(protein_filtered_df)
     edge_filtered_df = subset_by_edge_type(node_filtered_df)
-    protein_filtered_df = subset_by_protein(edge_filtered_df)
 
-    return protein_filtered_df
+    return edge_filtered_df
 
 
 def get_edges(df: DataFrame,
@@ -150,8 +193,13 @@ def get_edges(df: DataFrame,
     edge_colors = []  # List[str]
     edge_styles = []  # List[List[int]]
 
-    for edge in graph.edges():
+    progress_bar = tqdm(list(graph.edges()), total=len(graph.edges()))
+
+    # If above statement didn't return anything, we render CORUM edges
+    for edge in progress_bar:
         # Undirected edge is: (s_x, s_y) <--> (t_x, t_y)
+        # Directed edge is: (s_x, s_y) --> (t_x, t_y)
+        # s = source, t = target
         source = edge[0]
         target = edge[1]
         source_coordinates = layout[source]
@@ -197,8 +245,8 @@ def get_edges(df: DataFrame,
             # No PPI support --> don't translate coordinates
             edge_x.append([s_x, t_x])
             edge_y.append([s_y, t_y])
-            edge_color = df[bait_mask & prey_mask]["edge_color"]
-            edge_style = df[bait_mask & prey_mask]["edge_style"]
+            edge_color = df[bait_mask & prey_mask]["edge_color"].values[0]
+            edge_style = df[bait_mask & prey_mask]["edge_style"].values[0]
             edge_colors.append(edge_color)
             edge_styles.append(edge_style)
         else:
@@ -210,80 +258,129 @@ def get_edges(df: DataFrame,
 
 def update() -> None:
     df = subset_dataframe()  # DataFrame
-    graph = nx.from_pandas_edgelist(df, source="Bait", target="Prey",
-                                    edge_attr=["edge_color", "edge_style"])
+    graph = nx.from_pandas_edgelist(df,
+                                    source="Bait",
+                                    target="Prey",
+                                    edge_attr=["edge_color", "edge_style"],
+                                    create_using=nx.DiGraph)
 
-    # TODO: Relocate this to initial ColumnDataSource declaration
-    node_sizes = [12 for _ in range(len(graph.nodes()))]  # List[int]
-
-    # Layout is a mapping of nodes --> coordinates
-    layout = nx.spring_layout(graph)  # Dict[str, ndarray]
-
-    # Show protein names only if the LABELS checkbox is active
-    if controls.apply_labels_checkbox.active:
-        new_node_names = list(layout.keys())  # List[str]
-    else:
-        new_node_names = ["" for _ in layout.keys()]
-
-    node_coordinates = zip(*layout.values())
-    node_x, node_y = node_coordinates
-
-    # TODO: Find way to dynamically set alpha based on node_size
-    alpha = 5e-5
-    new_edges_out = get_edges(df, graph, layout, alpha)
-    new_edges, new_ppi_edges, new_edge_colors, new_edge_styles = new_edges_out
-    edge_x, edge_y = new_edges
-    ppi_x, ppi_y = new_ppi_edges
-
-    # Account for the "color by" selection menu
     clustering_method = str(controls.graph_clustering_selection.value)  # str
-    resolution = float(controls.clustering_resolution.value)  # float
-    init_node_coloring = determine_node_coloring(df)
-    clustering_output = get_clustered_coloring(graph,
-                                               method=clustering_method,
-                                               res=resolution,
-                                               node_coloring=init_node_coloring)
-    new_node_coloring, clusters = clustering_output
 
-    # Get new summary statistics based on new subsetting of the dataframe/graph
-    new_stats = get_graph_statistics(df,
-                                     graph,
-                                     num_proteins=5,
-                                     num_complexes=5,
-                                     clusters=clusters)  # str
-    statistics_info.text = new_stats
+    if clustering_method == "no clustering":
+        # TODO: Relocate this to initial ColumnDataSource declaration
+        node_sizes = [12 for _ in range(len(graph.nodes()))]  # List[int]
 
-    new_node_colors = []  # List[str]
-    for node in layout.keys():
-        if node in new_node_coloring:
-            color = new_node_coloring[node]
-            new_node_colors.append(color)
+        # Layout is a mapping of nodes --> coordinates
+        layout = nx.spring_layout(graph)  # Dict[str, ndarray]
+
+        # Show protein names only if the LABELS checkbox is active
+        if controls.apply_labels_checkbox.active:
+            new_node_names = list(layout.keys())  # List[str]
         else:
-            new_node_colors.append(GRAY)
+            new_node_names = ["" for _ in layout.keys()]
 
-    source_nodes.data = dict(
-        xs=node_x,
-        ys=node_y,
-        names=new_node_names,
-        color=new_node_colors,
-        node_size=node_sizes,
-        label=new_node_names,
-    )
+        node_coordinates = zip(*layout.values())
+        node_x, node_y = node_coordinates
 
-    source_edges.data = dict(
-        xs=edge_x,
-        ys=edge_y,
-        line_dash=new_edge_styles,
-        line_color=new_edge_colors,
-    )
+        interaction_support_toggled = interaction_support_checkbox_button.active
+        if InteractionSupport.CORUM.value in interaction_support_toggled:
+            # TODO: Find way to dynamically set alpha based on node_size
+            alpha = 5e-5
+            new_edges_out = get_edges(df, graph, layout, alpha)
+            new_edges, new_ppi_edges, new_edge_colors, new_edge_styles = new_edges_out
+            edge_x, edge_y = new_edges
+            ppi_x, ppi_y = new_ppi_edges
+        else:
+            edge_x = [[layout[source][0], layout[target][0]]
+                      for source, target in graph.edges()]
+            edge_y = [[layout[source][1], layout[target][1]]
+                      for source, target in graph.edges()]
 
-    ppi_edges.data = dict(
-        xs=ppi_x,
-        ys=ppi_y,
+            edge_data = list(graph.edges(data=True))
+            new_edge_colors = [attr["edge_color"] for _, _, attr in edge_data]
+            new_edge_styles = [attr["edge_style"] for _, _, attr in edge_data]
 
-        # TODO: Replace this with "solid" in ColumnDataSource instantiation
-        line_dash=[[] for _ in ppi_x]
-    )
+            ppi_x, ppi_y = [], []
+
+        # Account for the "color by" selection menu
+        init_node_coloring = determine_node_coloring(df)
+
+        # Get new summary statistics based on new subsetting of the dataframe/graph
+        new_stats: str = get_graph_statistics(df, graph, num_proteins=5, num_complexes=5, clusters=None)
+        statistics_info.text = new_stats
+
+        new_node_colors = []  # List[str]
+        new_node_category: List[str] = []
+        for node in layout.keys():
+            if node in init_node_coloring:
+                color = init_node_coloring[node]["node_color"]
+                category = init_node_coloring[node]["legend_label"]
+                new_node_colors.append(color)
+                new_node_category.append(category)
+            else:
+                new_node_colors.append(GRAY)
+                new_node_colors.append("N/A")
+
+        source_nodes.data = dict(
+            xs=node_x,
+            ys=node_y,
+            names=new_node_names,
+            color=new_node_colors,
+            node_size=node_sizes,
+            node_category=new_node_category,
+            label=new_node_names,
+        )
+
+        source_edges.data = dict(
+            xs=edge_x,
+            ys=edge_y,
+            line_dash=new_edge_styles,
+            line_color=new_edge_colors,
+        )
+
+        ppi_edges.data = dict(xs=ppi_x, ys=ppi_y, line_dash=[[] for _ in ppi_x])
+    else:
+        # Account for the "color by" selection menu
+        init_node_coloring = determine_node_coloring(df)
+
+        clustering_resolution: float = float(controls.clustering_resolution.value)
+        cluster_graph, nodes_per_cluster = create_cluster_graph(graph=graph,
+                                                                method=clustering_method,
+                                                                res=clustering_resolution,
+                                                                node_coloring=init_node_coloring)
+
+        layout = nx.spring_layout(cluster_graph, weight=None)
+
+        node_coordinates = zip(*layout.values())
+        node_x, node_y = node_coordinates
+
+        edge_x = [[layout[source][0], layout[target][0]]
+                  for source, target in cluster_graph.edges()]
+        edge_y = [[layout[source][1], layout[target][1]]
+                  for source, target in cluster_graph.edges()]
+
+        new_node_colors = [color for node, color in nx.get_node_attributes(cluster_graph, "color").items()]
+        new_node_sizes = [size for node, size in nx.get_node_attributes(cluster_graph, "size").items()]
+        new_node_category = ["<br>".join(node_group) for node_group in nodes_per_cluster.values()]
+
+        source_nodes.data = dict(
+            xs=node_x,
+            ys=node_y,
+            names=[str(node) for node in cluster_graph.nodes()],
+            color=new_node_colors,
+            node_size=new_node_sizes,
+            node_category=new_node_category,
+            label=[str(node) for node in cluster_graph.nodes()],
+        )
+
+        source_edges.data = dict(
+            xs=edge_x,
+            ys=edge_y,
+            line_dash=[[] for _ in cluster_graph.edges()],
+            line_color=[GRAY for _ in cluster_graph.edges()],
+        )
+
+        ppi_edges.data = dict(xs=[], ys=[], line_dash=[])
 
     # Set callback on each update to ensure only subset_df is downloaded
     download_button.js_on_click(
@@ -299,6 +396,8 @@ primary_div = Div(
     text=open(join(dirname(__file__), "Interactome.html")).read(),
     sizing_mode="stretch_width"
 )
+
+graph_viewer.hover.renderers = [scatter]
 
 create_interactome_button.on_click(update)
 control_inputs = column(*controls.all_controls, width=300)

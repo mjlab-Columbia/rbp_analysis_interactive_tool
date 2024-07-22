@@ -1,6 +1,7 @@
 from pandas import DataFrame, read_excel
 from data import InteractionTypeValue, Dataset
 from networkx import betweenness_centrality, Graph
+from pdb import set_trace
 
 from typing import List, Tuple, Union
 
@@ -66,21 +67,26 @@ def get_number_of_ip_interactions(df: DataFrame) -> int:
 def get_top_betweenness_proteins(df: DataFrame,
                                  graph: Graph,
                                  num_proteins: int) -> List[Tuple[str, float]]:
-    bw_dict = betweenness_centrality(graph)  # Dict[str, float]
-    sorted_bw = sorted(bw_dict.items(),
-                       key=lambda x: x[1])  # List[Tuple[str, float]]
-    sorted_bw_subset = sorted_bw[:num_proteins]  # List[Tuple[str, float]]
+    # Load the pre-calculated betweenness centrality values
+    norm_bw_filepath = "SupplementalTable_8.xlsx"  # str
+    bw_df = read_excel(norm_bw_filepath, sheet_name=1, index_col=0)  # DataFrame
+    bw_df.reset_index(inplace=True)  # None
+    bw_df.columns = ["protein", "bw_centrality", "is_bait"]  # List[str]
+
+    # Create dictionary of nodes in graph with their betweenness centrality value
+    _bw_dict = bw_df.set_index("protein")["bw_centrality"].to_dict()
+    bw_dict = {key: value for key, value in _bw_dict.items() if key in graph.nodes()}
+
+    # Sort by value and return top `num_proteins`
+    sorted_bw_asc: List[Tuple[str, float]] = sorted(bw_dict.items(), key=lambda x: x[1])
+    sorted_bw_desc: List[Tuple[str, float]] = list(reversed(sorted_bw_asc))
+    sorted_bw_subset = sorted_bw_desc[:num_proteins]
     return sorted_bw_subset
 
 
 def get_num_corum_complexes(df: DataFrame) -> int:
-    return 0
-
-
-def get_top_betweenness_complexes(df: DataFrame,
-                                  num_complexes: int = 5) -> int:
-
-    return 0
+    unique_complexes = df["CORUM_complex_2022"].dropna().unique()  # ndarray
+    return len(unique_complexes)
 
 
 def get_graph_statistics(df: DataFrame,
@@ -105,9 +111,7 @@ def get_graph_statistics(df: DataFrame,
     sec_interactions = get_number_of_sec_interactions(df)  # int
     ip_interactions = get_number_of_ip_interactions(df)  # int
 
-    bw_proteins = get_top_betweenness_proteins(df=df,
-                                               graph=graph,
-                                               num_proteins=5)
+    bw_proteins = get_top_betweenness_proteins(df=df, graph=graph, num_proteins=5)
 
     top_proteins = [protein for protein, _ in bw_proteins]  # List[str]
 
@@ -140,19 +144,15 @@ def get_graph_statistics(df: DataFrame,
     top_five_proteins = f"{preamble}\n{protein_list}"
 
     if clusters is None:
-        stats_list = [node_stats, interaction_type_stats,
-                      interaction_origin_stats, top_five_proteins]  # List[str]
+        stats_list = [node_stats, interaction_type_stats, interaction_origin_stats, top_five_proteins]  # List[str]
         stats_string = "\n\n".join(stats_list)  # str
     else:
         num_complexes = get_num_corum_complexes(df)  # int
 
         norm_bw_filepath = "SupplementalTable_8.xlsx"  # str
-        norm_bw_df = read_excel(norm_bw_filepath,
-                                sheet_name=1,
-                                index_col=0)  # DataFrame
+        norm_bw_df = read_excel(norm_bw_filepath, sheet_name=1, index_col=0)  # DataFrame
         norm_bw_df.reset_index(inplace=True)  # None
-        norm_bw_df.columns = ["protein",
-                              "bw_centrality", "is_bait"]  # List[str]
+        norm_bw_df.columns = ["protein", "bw_centrality", "is_bait"]  # List[str]
 
         # Populate dict with most common CORUM complex per cluster and median
         # betweenness centrality of proteins in cluster

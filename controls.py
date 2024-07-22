@@ -1,12 +1,13 @@
 from bokeh.models.widgets.inputs import Checkbox, TextInput
 from bokeh.models.widgets import Slider, Select
+from bokeh.models import PreText
 import buttons
 
 # Toggle for whether to display the labels on nodes
 apply_labels_checkbox = Checkbox(active=False, label='LABELS')  # Checkbox
 
 # Field for entering a specific protein name by user
-protein_text_input = TextInput(title="Protein")  # TextInput
+protein_text_input = TextInput(title="Protein", width_policy="max")  # TextInput
 
 # Clustering options
 graph_clustering_selection = Select(
@@ -17,7 +18,8 @@ graph_clustering_selection = Select(
         'markov',
         'clusterONE'
     ],
-    value="no clustering"
+    value="no clustering",
+    width_policy="max"
 )
 
 # Clustering resolution
@@ -26,7 +28,8 @@ clustering_resolution = Slider(
     value=0.0,
     start=0.0,
     end=1.0,
-    step=0.1
+    step=0.1,
+    width_policy="max"
 )
 
 # Overlay options
@@ -38,7 +41,8 @@ node_coloring_selection = Select(
         'location',
         'disease'
     ],
-    value="none"
+    value="none",
+    width_policy="max"
 )
 
 num_neighbors_selection = Select(
@@ -48,12 +52,15 @@ num_neighbors_selection = Select(
         "2",
         "3"
     ],
-    value="1"
+    value="1",
+    width_policy="max"
 )
 
 all_controls = [
+    PreText(text="Source", width_policy="max"),
     buttons.dataset_checkbox_button,
-    buttons.dataset_combined_checkbox_button,
+    PreText(text="Interaction Support", width_policy="max"),
+    buttons.interaction_support_checkbox_button,
     buttons.interaction_type_checkbox_button,
     protein_text_input,
     num_neighbors_selection,
