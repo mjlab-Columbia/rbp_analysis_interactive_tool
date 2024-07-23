@@ -54,6 +54,14 @@ Once you have the dependencies installed, run the application by executing the f
 bokeh serve app.py
 ```
 
+## Operating System (OS) Compatibility
+
+This software has been tested end-to-end on the following operating systems and architectures:
+
+| OS Name | Architecture | OS Abbreviation |
+|---------|--------------|-----------------|
+| MacOS (Version 15.0 Beta 24A5289h)  | ARM  | `osx-arm64` |
+
 ## Citation
 
 Bibtex citation will be listed here once available.
