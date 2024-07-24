@@ -60,7 +60,8 @@ This software has been tested end-to-end on the following operating systems and 
 
 | OS Name | Architecture | OS Abbreviation |
 |---------|--------------|-----------------|
-| MacOS (Version 15.0 Beta 24A5289h)  | ARM  | `osx-arm64` |
+| MacOS (Version 15.0 Beta)  | ARM  | `osx-arm64` |
+| MacOS (Version 14.5)  | x86  | `osx-x86_64` |
 
 ## Citation
 
