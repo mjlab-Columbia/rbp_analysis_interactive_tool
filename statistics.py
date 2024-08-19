@@ -1,5 +1,6 @@
 from pandas import DataFrame, read_excel
 from data import InteractionTypeValue, Dataset
+from controls import use_normalized_betweenness
 from networkx import betweenness_centrality, Graph
 from pdb import set_trace
 
@@ -69,7 +70,12 @@ def get_top_betweenness_proteins(df: DataFrame,
                                  num_proteins: int) -> List[Tuple[str, float]]:
     # Load the pre-calculated betweenness centrality values
     norm_bw_filepath = "SupplementalTable_8.xlsx"  # str
-    bw_df = read_excel(norm_bw_filepath, sheet_name=1, index_col=0)  # DataFrame
+
+    if use_normalized_betweenness.active:
+        bw_df = read_excel(norm_bw_filepath, sheet_name=1, index_col=0)  # DataFrame
+    else:
+        bw_df = read_excel(norm_bw_filepath, sheet_name=0, index_col=0)  # DataFrame
+
     bw_df.reset_index(inplace=True)  # None
     bw_df.columns = ["protein", "bw_centrality", "is_bait"]  # List[str]
 

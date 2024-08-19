@@ -6,6 +6,9 @@ import buttons
 # Toggle for whether to display the labels on nodes
 apply_labels_checkbox = Checkbox(active=False, label='LABELS')  # Checkbox
 
+# Toggle for whether to use normalized or unnormalized betweenness centrality values
+use_normalized_betweenness = Checkbox(active=False, label='Use Normalized Betweenness')
+
 # Field for entering a specific protein name by user
 protein_text_input = TextInput(title="Protein", width_policy="max")  # TextInput
 
@@ -68,6 +71,7 @@ all_controls = [
     clustering_resolution,
     node_coloring_selection,
     apply_labels_checkbox,
+    use_normalized_betweenness,
     buttons.create_interactome_button,
     buttons.download_button,
 ]
