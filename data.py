@@ -9,7 +9,6 @@ from buttons import interaction_type_checkbox_button
 from colors import EdgeColors, LifecycleColorsDict, LifecycleColors
 import controls
 
-from itertools import permutations
 from typing import Dict, Hashable, List, Set, Union
 from pdb import set_trace
 
@@ -232,7 +231,7 @@ def subset_by_protein(df: DataFrame) -> DataFrame:
         rows_to_include: Set[int] = set()
         rows_to_include.update(set(prey_df.index))
 
-        for _ in range(num_neighbors - 1):
+        for _ in range(num_neighbors):
             subset_df = df[df["Bait"].isin(preys) | df["Prey"].isin(preys)].copy()
             rows_to_include.update(set(subset_df.index))
             preys = subset_df["Prey"].values
